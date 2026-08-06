@@ -221,12 +221,22 @@ a.project-image-link { border-bottom: none; display: block; }
     transition: opacity var(--fade-dur) ease-in-out;
 }
 
+/* Цвет тени — по фону картинки, с которым тень соприкасается. */
+.project { --shadow: 0, 0, 0; }
+.project-profi { --shadow: 50, 58, 100; }       /* холодный голубой #E4E8FC */
+.project-ruchess { --shadow: 95, 72, 38; }      /* кремово-жёлтый #FCECE0 */
+.project-automate { --shadow: 45, 55, 72; }     /* холодный серо-голубой #E0E4E4 */
+.project-style { --shadow: 88, 62, 58; }        /* тёплый розоватый #F4F0F0 */
+.project-tad { --shadow: 45, 60, 95; }          /* холодный голубой #F0F4F8 */
+.project-homestead { --shadow: 92, 78, 55; }    /* тёплый янтарь #E8E4E0 */
+.project-plates { --shadow: 95, 42, 42; }       /* серый #F0F0F0 + красный #90240C */
+
 /* Десктопный ховер */
 @media (min-width: 951px) {
     body:not(.is-safari) .img-hover-wrap {
-        filter: drop-shadow(3px 3px 3px rgba(0, 0, 0, 0.06))
-                drop-shadow(8px 8px 8px rgba(0, 0, 0, 0.05))
-                drop-shadow(15px 15px 15px rgba(0, 0, 0, 0.05));
+        filter: drop-shadow(3px 3px 3px rgba(var(--shadow), 0.10))
+                drop-shadow(8px 8px 8px rgba(var(--shadow), 0.08))
+                drop-shadow(15px 15px 15px rgba(var(--shadow), 0.07));
     }
 
     .project:hover .img-base {
