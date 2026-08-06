@@ -154,11 +154,30 @@ h1 {
 .project { width: 100%; }
 a.project-image-link { border-bottom: none; display: block; }
 
+/* Эскиз уходит wipe-маской слева направо, реальная картинка проявляется через opacity. */
 .project-image {
-    display: grid; 
+    display: grid;
     border-radius: 8px;
-    margin-bottom: 44px; 
-    background: transparent; 
+    margin-bottom: 44px;
+    background: transparent;
+
+    /* Геометрия маски — в долях ширины картинки. */
+    --dur: 0.9s;                                /* длительность wipe эскиза */
+    --wipe-ease: cubic-bezier(0.2, 0, 0.2, 1);
+    --fade-dur: 0.85s;                          /* длительность появления реальной */
+    --f: 2;                                     /* ширина растушёвки */
+    --angle: 96deg;                             /* наклон границы; 90deg — вертикальная */
+    --slack: 0.35;                              /* запас по краям под наклон */
+
+    --s0: calc(1 + var(--slack));               /* где эскиз уже прозрачен */
+    --s1: calc(var(--s0) + var(--f));           /* где эскиз ещё непрозрачен */
+    --m: calc(var(--s1) + 1 + var(--slack));    /* полная ширина маски */
+
+    --mask-w: calc(var(--m) * 100%);
+    --mask-rest: 100%;
+    --mask-reveal: 0%;
+    --sketch-clear: calc(var(--s0) / var(--m) * 100%);
+    --sketch-solid: calc(var(--s1) / var(--m) * 100%);
 }
 
 .project-image img {
@@ -167,35 +186,73 @@ a.project-image-link { border-bottom: none; display: block; }
     height: auto;
     display: block;
     border-radius: 8px;
-    transition: opacity 0.8s ease-in-out; 
-    will-change: opacity; 
-    transform: translateZ(0); 
+    transform: translateZ(0);
 }
 
-.img-hover {
+/* Wipe-маска эскиза */
+.img-base {
+    z-index: 0;
+    -webkit-mask-image: linear-gradient(
+        var(--angle),
+        transparent 0%,
+        transparent var(--sketch-clear),
+        #000 var(--sketch-solid)
+    );
+    mask-image: linear-gradient(
+        var(--angle),
+        transparent 0%,
+        transparent var(--sketch-clear),
+        #000 var(--sketch-solid)
+    );
+    -webkit-mask-size: var(--mask-w) 100%;
+    mask-size: var(--mask-w) 100%;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: var(--mask-rest) 0%;
+    mask-position: var(--mask-rest) 0%;
+    transition: -webkit-mask-position var(--dur) var(--wipe-ease), mask-position var(--dur) var(--wipe-ease);
+}
+
+/* Реальная картинка: opacity. Тень на обёртке, чтобы filter не мешал. */
+.img-hover-wrap {
+    grid-area: 1 / 1;
+    z-index: 1;
     opacity: 0;
+    transition: opacity var(--fade-dur) ease-in-out;
 }
 
 /* Десктопный ховер */
 @media (min-width: 951px) {
-    body:not(.is-safari) .img-hover {
-        filter: drop-shadow(3px 3px 3px rgba(0, 0, 0, 0.06)) 
-                drop-shadow(8px 8px 8px rgba(0, 0, 0, 0.05)) 
+    body:not(.is-safari) .img-hover-wrap {
+        filter: drop-shadow(3px 3px 3px rgba(0, 0, 0, 0.06))
+                drop-shadow(8px 8px 8px rgba(0, 0, 0, 0.05))
                 drop-shadow(15px 15px 15px rgba(0, 0, 0, 0.05));
     }
 
-    .project:hover .img-hover { opacity: 1; }
-    .project:hover .img-base { opacity: 0; }
+    .project:hover .img-base {
+        -webkit-mask-position: var(--mask-reveal) 0%;
+        mask-position: var(--mask-reveal) 0%;
+    }
+
+    .project:hover .img-hover-wrap {
+        opacity: 1;
+    }
 }
 
 @media (min-width: 901px) {
     .col-hero a { display: none; }
 }
 
-/* Мобильный ховер */
+/* Мобильный ховер (скролл) */
 @media (max-width: 950px) {
-    .project.is-active .img-hover { opacity: 1; }
-    .project.is-active .img-base { opacity: 0; }
+    .project.is-active .img-base {
+        -webkit-mask-position: var(--mask-reveal) 0%;
+        mask-position: var(--mask-reveal) 0%;
+    }
+
+    .project.is-active .img-hover-wrap {
+        opacity: 1;
+    }
 }
 
 .project-text { display: flex; align-items: flex-start; }
