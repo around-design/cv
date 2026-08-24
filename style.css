@@ -214,6 +214,13 @@ a.project-image-link { border-bottom: none; display: block; }
     transition: -webkit-mask-position var(--dur) var(--wipe-ease), mask-position var(--dur) var(--wipe-ease);
 }
 
+/* Сафари: без wipe, только перекрёстный fade — маска там дёргается. */
+body.is-safari .img-base {
+    -webkit-mask-image: none;
+    mask-image: none;
+    transition: opacity var(--fade-dur) ease-in-out;
+}
+
 /* Реальная картинка: opacity. Тень на обёртке, чтобы filter не мешал. */
 .img-hover-wrap {
     grid-area: 1 / 1;
@@ -222,15 +229,22 @@ a.project-image-link { border-bottom: none; display: block; }
     transition: opacity var(--fade-dur) ease-in-out;
 }
 
-/* Сафари: тень — canvas-сосед, не CSS filter. Бокс больше картинки, фейдится отдельно. */
+/* Сафари: SVG-тень рядом с фото, не CSS filter и не canvas. */
 .img-shadow {
     grid-area: 1 / 1;
     position: absolute;
     z-index: 1;
     display: block;
+    overflow: visible;
     pointer-events: none;
     opacity: 0;
     transition: opacity var(--fade-dur) ease-in-out;
+}
+
+/* Не гасить до 0: Сафари выгружает SVG-фильтр, и первый fade снова рывок. */
+body.is-safari .img-shadow {
+    opacity: 0.01;
+    will-change: opacity;
 }
 
 /* Цвет тени — по фону картинки, с которым тень соприкасается. */
@@ -243,23 +257,32 @@ a.project-image-link { border-bottom: none; display: block; }
 .project-homestead { --shadow: 92, 78, 55; }    /* тёплый янтарь #E8E4E0 */
 .project-plates { --shadow: 95, 42, 42; }       /* серый #F0F0F0 + красный #90240C */
 
-/* CSS-тень по альфе — везде, кроме Сафари (там canvas). */
+/* CSS-тень по альфе — везде, кроме Сафари (там SVG). */
 body:not(.is-safari) .img-hover-wrap {
-    filter: drop-shadow(3px 3px 3px rgba(var(--shadow), 0.10))
-            drop-shadow(8px 8px 8px rgba(var(--shadow), 0.08))
-            drop-shadow(15px 15px 15px rgba(var(--shadow), 0.07));
+    filter: drop-shadow(0 0 3px rgba(var(--shadow), 0.10))
+            drop-shadow(5px 5px 8px rgba(var(--shadow), 0.08))
+            drop-shadow(12px 12px 15px rgba(var(--shadow), 0.07));
 }
 
 /* Десктопный ховер */
 @media (min-width: 951px) {
-    .project:hover .img-base {
+    body:not(.is-safari) .project:hover .img-base {
         -webkit-mask-position: var(--mask-reveal) 0%;
         mask-position: var(--mask-reveal) 0%;
+    }
+
+    body.is-safari .project:hover .img-base {
+        opacity: 0;
     }
 
     .project:hover .img-hover-wrap,
     .project:hover .img-shadow {
         opacity: 1;
+    }
+
+    /* Не доводить до 1: Сафари снимает SVG-фильтр и рисует сырое фото. */
+    body.is-safari .project:hover .img-shadow {
+        opacity: 0.99;
     }
 }
 
@@ -269,14 +292,22 @@ body:not(.is-safari) .img-hover-wrap {
 
 /* Мобильный ховер (скролл) */
 @media (max-width: 950px) {
-    .project.is-active .img-base {
+    body:not(.is-safari) .project.is-active .img-base {
         -webkit-mask-position: var(--mask-reveal) 0%;
         mask-position: var(--mask-reveal) 0%;
+    }
+
+    body.is-safari .project.is-active .img-base {
+        opacity: 0;
     }
 
     .project.is-active .img-hover-wrap,
     .project.is-active .img-shadow {
         opacity: 1;
+    }
+
+    body.is-safari .project.is-active .img-shadow {
+        opacity: 0.99;
     }
 }
 

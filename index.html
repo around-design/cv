@@ -8,7 +8,7 @@
     <meta name="author" content="Валентин Филиппов">
     <link rel="canonical" href="https://cv.around.design/">
     <link href="images/favicon.png" rel="icon">
-    <link rel="stylesheet" href="style.css?v=38">
+    <link rel="stylesheet" href="style.css?v=44">
 
     <!-- Open Graph -->
     <meta property="og:type" content="profile">
@@ -254,14 +254,22 @@
                 initSafariImageShadows();
             }
 
-            // Тень по альфе: canvas рядом с фото, в CSS-пикселях, с запасом под blur.
+            // Тень по альфе через SVG feGaussianBlur (SourceAlpha картинки).
             function initSafariImageShadows() {
                 const PAD = 40;
                 const LAYERS = [
-                    [3, 3, 3, 0.10],
-                    [8, 8, 8, 0.08],
-                    [15, 15, 15, 0.07]
+                    [0, 0, 3, 0.10],
+                    [5, 5, 8, 0.08],
+                    [12, 12, 15, 0.07]
                 ];
+                const svgNS = 'http://www.w3.org/2000/svg';
+                const xlinkNS = 'http://www.w3.org/1999/xlink';
+
+                const svgEl = (name, attrs) => {
+                    const el = document.createElementNS(svgNS, name);
+                    Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+                    return el;
+                };
 
                 const imageReady = (img) => {
                     const decode = () => (img.decode ? img.decode().catch(() => {}) : Promise.resolve());
@@ -272,51 +280,61 @@
                     });
                 };
 
-                const makeSilhouette = (img, w, h, radius) => {
-                    const layer = document.createElement('canvas');
-                    layer.width = w;
-                    layer.height = h;
-                    const ctx = layer.getContext('2d');
-                    ctx.beginPath();
-                    if (radius > 0 && typeof ctx.roundRect === 'function') {
-                        ctx.roundRect(0, 0, w, h, radius);
-                    } else {
-                        ctx.rect(0, 0, w, h);
-                    }
-                    ctx.clip();
-                    ctx.drawImage(img, 0, 0, w, h);
-                    return layer;
-                };
+                const paint = (holder, svg, img, rgb, uid) => {
+                    const cssW = Math.round(img.getBoundingClientRect().width);
+                    const cssH = Math.round(img.getBoundingClientRect().height);
+                    if (!img.naturalWidth || cssW < 2 || cssH < 2) return false;
 
-                const paint = (canvas, img, rgb) => {
-                    const w = Math.round(img.getBoundingClientRect().width);
-                    const h = Math.round(img.getBoundingClientRect().height);
-                    if (!img.naturalWidth || w < 2 || h < 2) return false;
+                    const w = cssW + PAD * 2;
+                    const h = cssH + PAD * 2;
+                    holder.style.width = w + 'px';
+                    holder.style.height = h + 'px';
+                    holder.style.left = -PAD + 'px';
+                    holder.style.top = -PAD + 'px';
+                    svg.setAttribute('width', w);
+                    svg.setAttribute('height', h);
+                    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+                    svg.replaceChildren();
 
-                    const radius = parseFloat(getComputedStyle(img).borderRadius) || 0;
-                    const src = makeSilhouette(img, w, h, radius);
+                    const filter = svgEl('filter', {
+                        id: uid,
+                        filterUnits: 'userSpaceOnUse',
+                        x: '0',
+                        y: '0',
+                        width: String(w),
+                        height: String(h),
+                        'color-interpolation-filters': 'sRGB'
+                    });
 
-                    canvas.width = w + PAD * 2;
-                    canvas.height = h + PAD * 2;
-                    canvas.style.width = canvas.width + 'px';
-                    canvas.style.height = canvas.height + 'px';
-                    canvas.style.left = -PAD + 'px';
-                    canvas.style.top = -PAD + 'px';
+                    LAYERS.forEach(([dx, dy, blur, alpha], i) => {
+                        filter.append(
+                            svgEl('feOffset', { in: 'SourceAlpha', dx: String(dx), dy: String(dy), result: 'off' + i }),
+                            svgEl('feGaussianBlur', { in: 'off' + i, stdDeviation: String(blur / 2), result: 'blur' + i }),
+                            svgEl('feFlood', { 'flood-color': `rgb(${rgb})`, 'flood-opacity': String(alpha), result: 'flood' + i }),
+                            svgEl('feComposite', { in: 'flood' + i, in2: 'blur' + i, operator: 'in', result: 's' + i })
+                        );
+                    });
 
-                    const ctx = canvas.getContext('2d');
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    for (const [x, y, blur, alpha] of LAYERS) {
-                        ctx.save();
-                        ctx.shadowOffsetX = x;
-                        ctx.shadowOffsetY = y;
-                        ctx.shadowBlur = blur;
-                        ctx.shadowColor = `rgba(${rgb}, ${alpha})`;
-                        ctx.drawImage(src, PAD, PAD);
-                        ctx.restore();
-                    }
-                    ctx.globalCompositeOperation = 'destination-out';
-                    ctx.drawImage(src, PAD, PAD);
-                    ctx.globalCompositeOperation = 'source-over';
+                    const merge = svgEl('feMerge', {});
+                    LAYERS.forEach((_, i) => merge.appendChild(svgEl('feMergeNode', { in: 's' + i })));
+                    filter.appendChild(merge);
+
+                    const defs = svgEl('defs', {});
+                    defs.appendChild(filter);
+
+                    const src = img.getAttribute('src');
+                    const image = svgEl('image', {
+                        href: src,
+                        x: String(PAD),
+                        y: String(PAD),
+                        width: String(cssW),
+                        height: String(cssH),
+                        filter: `url(#${uid})`,
+                        preserveAspectRatio: 'none'
+                    });
+                    image.setAttributeNS(xlinkNS, 'href', src);
+
+                    svg.append(defs, image);
                     return true;
                 };
 
@@ -328,16 +346,19 @@
                     }
                 };
 
-                document.querySelectorAll('.img-hover-wrap').forEach((wrap) => {
+                document.querySelectorAll('.img-hover-wrap').forEach((wrap, index) => {
                     const img = wrap.querySelector('.img-hover');
                     const project = wrap.closest('.project');
                     const box = wrap.closest('.project-image');
                     if (!img || !project || !box) return;
 
-                    const canvas = document.createElement('canvas');
-                    canvas.className = 'img-shadow';
-                    canvas.setAttribute('aria-hidden', 'true');
-                    box.insertBefore(canvas, wrap);
+                    const uid = 'img-shadow-' + index;
+                    const holder = document.createElement('div');
+                    holder.className = 'img-shadow';
+                    holder.setAttribute('aria-hidden', 'true');
+                    const svg = svgEl('svg', {});
+                    holder.appendChild(svg);
+                    box.insertBefore(holder, wrap);
 
                     const rgb = (getComputedStyle(project).getPropertyValue('--shadow') || '0, 0, 0').trim();
                     let lastKey = '';
@@ -345,9 +366,9 @@
                     const update = () => {
                         if (!img.naturalWidth) return;
                         const rect = img.getBoundingClientRect();
-                        const key = `${Math.round(rect.width)}x${Math.round(rect.height)}x${getComputedStyle(img).borderRadius}`;
+                        const key = `${Math.round(rect.width)}x${Math.round(rect.height)}`;
                         if (key === lastKey) return;
-                        if (paint(canvas, img, rgb)) lastKey = key;
+                        if (paint(holder, svg, img, rgb, uid)) lastKey = key;
                     };
 
                     imageReady(img).then(() => schedule(update));
