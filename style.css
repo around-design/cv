@@ -157,6 +157,7 @@ a.project-image-link { border-bottom: none; display: block; }
 /* Эскиз уходит wipe-маской слева направо, реальная картинка проявляется через opacity. */
 .project-image {
     display: grid;
+    position: relative;
     border-radius: 8px;
     margin-bottom: 44px;
     background: transparent;
@@ -221,6 +222,17 @@ a.project-image-link { border-bottom: none; display: block; }
     transition: opacity var(--fade-dur) ease-in-out;
 }
 
+/* Сафари: тень — canvas-сосед, не CSS filter. Бокс больше картинки, фейдится отдельно. */
+.img-shadow {
+    grid-area: 1 / 1;
+    position: absolute;
+    z-index: 1;
+    display: block;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--fade-dur) ease-in-out;
+}
+
 /* Цвет тени — по фону картинки, с которым тень соприкасается. */
 .project { --shadow: 0, 0, 0; }
 .project-profi { --shadow: 50, 58, 100; }       /* холодный голубой #E4E8FC */
@@ -231,20 +243,22 @@ a.project-image-link { border-bottom: none; display: block; }
 .project-homestead { --shadow: 92, 78, 55; }    /* тёплый янтарь #E8E4E0 */
 .project-plates { --shadow: 95, 42, 42; }       /* серый #F0F0F0 + красный #90240C */
 
+/* CSS-тень по альфе — везде, кроме Сафари (там canvas). */
+body:not(.is-safari) .img-hover-wrap {
+    filter: drop-shadow(3px 3px 3px rgba(var(--shadow), 0.10))
+            drop-shadow(8px 8px 8px rgba(var(--shadow), 0.08))
+            drop-shadow(15px 15px 15px rgba(var(--shadow), 0.07));
+}
+
 /* Десктопный ховер */
 @media (min-width: 951px) {
-    body:not(.is-safari) .img-hover-wrap {
-        filter: drop-shadow(3px 3px 3px rgba(var(--shadow), 0.10))
-                drop-shadow(8px 8px 8px rgba(var(--shadow), 0.08))
-                drop-shadow(15px 15px 15px rgba(var(--shadow), 0.07));
-    }
-
     .project:hover .img-base {
         -webkit-mask-position: var(--mask-reveal) 0%;
         mask-position: var(--mask-reveal) 0%;
     }
 
-    .project:hover .img-hover-wrap {
+    .project:hover .img-hover-wrap,
+    .project:hover .img-shadow {
         opacity: 1;
     }
 }
@@ -260,7 +274,8 @@ a.project-image-link { border-bottom: none; display: block; }
         mask-position: var(--mask-reveal) 0%;
     }
 
-    .project.is-active .img-hover-wrap {
+    .project.is-active .img-hover-wrap,
+    .project.is-active .img-shadow {
         opacity: 1;
     }
 }

@@ -8,7 +8,7 @@
     <meta name="author" content="Валентин Филиппов">
     <link rel="canonical" href="https://cv.around.design/">
     <link href="images/favicon.png" rel="icon">
-    <link rel="stylesheet" href="style.css?v=37">
+    <link rel="stylesheet" href="style.css?v=38">
 
     <!-- Open Graph -->
     <meta property="og:type" content="profile">
@@ -247,10 +247,118 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // Определение Safari
+            // Определение Safari (включая iOS Chrome/Firefox — там тот же WebKit)
             const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
             if (isSafari) {
                 document.body.classList.add('is-safari');
+                initSafariImageShadows();
+            }
+
+            // Тень по альфе: canvas рядом с фото, в CSS-пикселях, с запасом под blur.
+            function initSafariImageShadows() {
+                const PAD = 40;
+                const LAYERS = [
+                    [3, 3, 3, 0.10],
+                    [8, 8, 8, 0.08],
+                    [15, 15, 15, 0.07]
+                ];
+
+                const imageReady = (img) => {
+                    const decode = () => (img.decode ? img.decode().catch(() => {}) : Promise.resolve());
+                    if (img.complete && img.naturalWidth) return decode();
+                    return new Promise((resolve) => {
+                        img.addEventListener('load', () => decode().then(resolve), { once: true });
+                        img.addEventListener('error', resolve, { once: true });
+                    });
+                };
+
+                const makeSilhouette = (img, w, h, radius) => {
+                    const layer = document.createElement('canvas');
+                    layer.width = w;
+                    layer.height = h;
+                    const ctx = layer.getContext('2d');
+                    ctx.beginPath();
+                    if (radius > 0 && typeof ctx.roundRect === 'function') {
+                        ctx.roundRect(0, 0, w, h, radius);
+                    } else {
+                        ctx.rect(0, 0, w, h);
+                    }
+                    ctx.clip();
+                    ctx.drawImage(img, 0, 0, w, h);
+                    return layer;
+                };
+
+                const paint = (canvas, img, rgb) => {
+                    const w = Math.round(img.getBoundingClientRect().width);
+                    const h = Math.round(img.getBoundingClientRect().height);
+                    if (!img.naturalWidth || w < 2 || h < 2) return false;
+
+                    const radius = parseFloat(getComputedStyle(img).borderRadius) || 0;
+                    const src = makeSilhouette(img, w, h, radius);
+
+                    canvas.width = w + PAD * 2;
+                    canvas.height = h + PAD * 2;
+                    canvas.style.width = canvas.width + 'px';
+                    canvas.style.height = canvas.height + 'px';
+                    canvas.style.left = -PAD + 'px';
+                    canvas.style.top = -PAD + 'px';
+
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    for (const [x, y, blur, alpha] of LAYERS) {
+                        ctx.save();
+                        ctx.shadowOffsetX = x;
+                        ctx.shadowOffsetY = y;
+                        ctx.shadowBlur = blur;
+                        ctx.shadowColor = `rgba(${rgb}, ${alpha})`;
+                        ctx.drawImage(src, PAD, PAD);
+                        ctx.restore();
+                    }
+                    ctx.globalCompositeOperation = 'destination-out';
+                    ctx.drawImage(src, PAD, PAD);
+                    ctx.globalCompositeOperation = 'source-over';
+                    return true;
+                };
+
+                const schedule = (fn) => {
+                    if ('requestIdleCallback' in window) {
+                        requestIdleCallback(fn, { timeout: 400 });
+                    } else {
+                        setTimeout(fn, 1);
+                    }
+                };
+
+                document.querySelectorAll('.img-hover-wrap').forEach((wrap) => {
+                    const img = wrap.querySelector('.img-hover');
+                    const project = wrap.closest('.project');
+                    const box = wrap.closest('.project-image');
+                    if (!img || !project || !box) return;
+
+                    const canvas = document.createElement('canvas');
+                    canvas.className = 'img-shadow';
+                    canvas.setAttribute('aria-hidden', 'true');
+                    box.insertBefore(canvas, wrap);
+
+                    const rgb = (getComputedStyle(project).getPropertyValue('--shadow') || '0, 0, 0').trim();
+                    let lastKey = '';
+
+                    const update = () => {
+                        if (!img.naturalWidth) return;
+                        const rect = img.getBoundingClientRect();
+                        const key = `${Math.round(rect.width)}x${Math.round(rect.height)}x${getComputedStyle(img).borderRadius}`;
+                        if (key === lastKey) return;
+                        if (paint(canvas, img, rgb)) lastKey = key;
+                    };
+
+                    imageReady(img).then(() => schedule(update));
+
+                    let resizeTimer;
+                    const ro = new ResizeObserver(() => {
+                        clearTimeout(resizeTimer);
+                        resizeTimer = setTimeout(update, 150);
+                    });
+                    ro.observe(img);
+                });
             }
 
             // Плавное переключение через Observer
