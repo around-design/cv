@@ -8,7 +8,7 @@
     <meta name="author" content="Валентин Филиппов">
     <link rel="canonical" href="https://cv.around.design/">
     <link href="images/favicon.png" rel="icon">
-    <link rel="stylesheet" href="style.css?v=45">
+    <link rel="stylesheet" href="style.css?v=53">
 
     <!-- Open Graph -->
     <meta property="og:type" content="profile">
@@ -48,15 +48,17 @@
             <div class="col-name" data-i18n="name">
                 Валентин<br>Филиппов
             </div>
+            <div class="header-gutter" aria-hidden="true"></div>
             <div class="col-contacts">
                 <a href="mailto:letters@around.design" class="email-link">letters@around.design</a><br class="email-br">
                 <a href="files/Valentin Filippov CV.pdf" target="_blank" rel="noopener noreferrer" class="cv-link" data-i18n="cv" data-i18n-href="cv_link">CV <span class="arrow">↗</span></a>
             </div>
+            <div class="header-gutter" aria-hidden="true"></div>
             <div class="col-language">
                 <a href="#" id="lang-toggle" class="pseudo-link">eng</a>
             </div>
             <div class="col-hero">
-                <h1 data-i18n="hero">Дизайнер цифровых продуктов. Проектирую&nbsp;удобные инструменты для&nbsp;людей &#151; от идеи до запуска. <a href="mailto:letters@around.design">Связаться</a></h1>
+                <h1 data-i18n="hero">Дизайнер цифровых&nbsp;продуктов. Проектирую&nbsp;удобные инструменты для&nbsp;людей &#151; от&nbsp;идеи до запуска. <a href="mailto:letters@around.design">Связаться</a></h1>
             </div>
             
             <div class="divider container-wide fade-in delay-2">
@@ -70,7 +72,7 @@
                 <p data-i18n="process_1">1&ensp;Исследую пользователей и&nbsp;предметную область, уточняю видение проекта.</p>
             </div>
             <div class="process-step">
-                <p data-i18n="process_2">2&ensp;Делаю концепты продукта, тестирую, выбираю лучший.</p>
+                <p data-i18n="process_2">2&ensp;Проектирую варианты дизайна, делаю и тестирую прототипы.</p>
             </div>
             <div class="process-step">
                 <p data-i18n="process_3">3&ensp;Финализирую дизайн, передаю разработчикам, сопровождаю запуск.</p>
@@ -92,7 +94,7 @@
                         <h2><a href="https://around.design/projects/profi-ru/" class="pseudo-link" data-i18n="profi_title" data-i18n-href="profi_link">Профи.ру, сервис для поиска специалистов</a></h2>
                     </div>
                     <div class="project-right" data-i18n="profi_desc">
-                        <p>Сделал редизайн ключевого сценария заказа услуги. В&nbsp;результате клиенты стали выбирать специалистов на&nbsp;12% чаще, а&nbsp;количество состоявшихся сделок увеличилось на&nbsp;5%.</p>
+                        <p>Сделал редизайн ключевого сценария заказа услуги. Клиенты стали выбирать специалистов на&nbsp;12% чаще, а&nbsp;количество сделок увеличилось на&nbsp;5%.</p>
                     </div>
                 </div>
             </div>
@@ -251,12 +253,14 @@
 
             // Тень по альфе через SVG feGaussianBlur (SourceAlpha картинки).
             function initSafariImageShadows() {
-                const PAD = 40;
-                const LAYERS = [
+                const BASE_PAD = 40;
+                const BASE_LAYERS = [
                     [0, 0, 3, 0.10],
                     [5, 5, 8, 0.08],
                     [12, 12, 15, 0.07]
                 ];
+                const mobileShadow = window.matchMedia('(max-width: 900px)');
+                const shadowScale = () => (mobileShadow.matches ? 2 : 1);
                 const svgNS = 'http://www.w3.org/2000/svg';
                 const xlinkNS = 'http://www.w3.org/1999/xlink';
 
@@ -280,12 +284,18 @@
                     const cssH = Math.round(img.getBoundingClientRect().height);
                     if (!img.naturalWidth || cssW < 2 || cssH < 2) return false;
 
-                    const w = cssW + PAD * 2;
-                    const h = cssH + PAD * 2;
+                    const scale = shadowScale();
+                    const pad = BASE_PAD * scale;
+                    const layers = BASE_LAYERS.map(([dx, dy, blur, alpha]) => [
+                        dx * scale, dy * scale, blur * scale, alpha
+                    ]);
+
+                    const w = cssW + pad * 2;
+                    const h = cssH + pad * 2;
                     holder.style.width = w + 'px';
                     holder.style.height = h + 'px';
-                    holder.style.left = -PAD + 'px';
-                    holder.style.top = -PAD + 'px';
+                    holder.style.left = -pad + 'px';
+                    holder.style.top = -pad + 'px';
                     svg.setAttribute('width', w);
                     svg.setAttribute('height', h);
                     svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
@@ -301,7 +311,7 @@
                         'color-interpolation-filters': 'sRGB'
                     });
 
-                    LAYERS.forEach(([dx, dy, blur, alpha], i) => {
+                    layers.forEach(([dx, dy, blur, alpha], i) => {
                         filter.append(
                             svgEl('feOffset', { in: 'SourceAlpha', dx: String(dx), dy: String(dy), result: 'off' + i }),
                             svgEl('feGaussianBlur', { in: 'off' + i, stdDeviation: String(blur / 2), result: 'blur' + i }),
@@ -311,7 +321,7 @@
                     });
 
                     const merge = svgEl('feMerge', {});
-                    LAYERS.forEach((_, i) => merge.appendChild(svgEl('feMergeNode', { in: 's' + i })));
+                    layers.forEach((_, i) => merge.appendChild(svgEl('feMergeNode', { in: 's' + i })));
                     filter.appendChild(merge);
 
                     const defs = svgEl('defs', {});
@@ -320,8 +330,8 @@
                     const src = img.getAttribute('src');
                     const image = svgEl('image', {
                         href: src,
-                        x: String(PAD),
-                        y: String(PAD),
+                        x: String(pad),
+                        y: String(pad),
                         width: String(cssW),
                         height: String(cssH),
                         filter: `url(#${uid})`,
@@ -361,7 +371,7 @@
                     const update = () => {
                         if (!img.naturalWidth) return;
                         const rect = img.getBoundingClientRect();
-                        const key = `${Math.round(rect.width)}x${Math.round(rect.height)}`;
+                        const key = `${Math.round(rect.width)}x${Math.round(rect.height)}@${shadowScale()}`;
                         if (key === lastKey) return;
                         if (paint(holder, svg, img, rgb, uid)) lastKey = key;
                     };
@@ -374,6 +384,10 @@
                         resizeTimer = setTimeout(update, 150);
                     });
                     ro.observe(img);
+                    mobileShadow.addEventListener('change', () => {
+                        lastKey = '';
+                        update();
+                    });
                 });
             }
 
@@ -410,9 +424,9 @@
                     name: "Valentin<br>Filippov",
                     cv: "cv <span class=arrow>↗</span>",
                     cv_link: "files/Valentin Filippov CV eng.pdf",
-                    hero: "I’m a product designer. I design easy-to-use tools for people — from an idea to launch. <a href=mailto:letters@around.design>Contact</a>",
+                    hero: "Product designer here. I'm&nbsp;focused&nbsp;on&nbsp;crafting easy-to-use tools for people — from an idea to launch. <a href=mailto:letters@around.design>Contact</a>",
                     process_1: "1&ensp;Researching users and context, refining the project vision.",
-                    process_2: "2&ensp;Sketching product concepts, testing them, choosing the best one.",
+                    process_2: "2&ensp;Sketching product concepts, building and testing prototypes.",
                     process_3: "3&ensp;Finalizing the design, handing it off to developers, supporting the launch.",
                     
                     profi_title: "Profi.ru, a platform for outsourcing everyday tasks",
