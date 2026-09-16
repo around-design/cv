@@ -471,7 +471,8 @@ h2.side-quests-title {
     .project-image img { border-radius: 3px; }
     .project-text { flex-direction: column; }
     .project-left, .project-right { width: 100%; padding-right: 0; }
-    .project-right { display: none; }
+    .project-right { padding-top: 0; }
+    .project-right p:last-child { margin-bottom: 0; }
 
     
     .desktop-only { display: none; }
