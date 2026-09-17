@@ -98,7 +98,9 @@ h2 a {
 .header-gutter { flex: 0 0 5%; }
 .col-language { flex: 0 0 20%; padding-left: 0; }
 .col-hero { flex: 1; }
-.email-link, .email-br { display: inline; }
+.hero-role-short { display: none; }
+.email-link, .email-br, .email-full { display: inline; }
+.email-short { display: none; }
 
 .arrow {
   display: inline;
@@ -263,9 +265,9 @@ body.is-safari .img-shadow {
 
 /* CSS-тень по альфе — везде, кроме Сафари (там SVG). */
 body:not(.is-safari) .img-hover-wrap {
-    filter: drop-shadow(0 0 3px rgba(var(--shadow), 0.10))
-            drop-shadow(5px 5px 8px rgba(var(--shadow), 0.08))
-            drop-shadow(12px 12px 15px rgba(var(--shadow), 0.07));
+    filter: drop-shadow(0 0 6px rgba(var(--shadow), 0.10))
+            drop-shadow(10px 10px 16px rgba(var(--shadow), 0.08))
+            drop-shadow(24px 24px 30px rgba(var(--shadow), 0.07));
 }
 
 /* Десктопный ховер */
@@ -434,10 +436,10 @@ h2.side-quests-title {
     .col-spacer { flex: 0 0 10%; }
 }
 
-/* Планшет: без email и процесса, «Связаться» в hero; отступ hero сильнее зависит от ширины */
+/* Планшет: email над cv, без процесса и «Связаться» в hero; отступ hero сильнее зависит от ширины */
 @media (min-width: 901px) and (max-width: 1149px) {
-    .email-link, .email-br { display: none; }
-    .col-hero a { display: inline; }
+    .col-contacts .email-full { display: none; }
+    .col-contacts .email-short { display: inline; }
     .process { display: none; }
     .col-language { flex: 0 0 auto; }
     .col-hero {
@@ -452,14 +454,18 @@ h2.side-quests-title {
     
     .col-name { order: 1; flex: 0 0 auto; min-width: 0; line-height: 1.3; }
     .col-language { order: 2; flex: 1; padding-left: 0; padding-right: 24px; text-align: right; line-height: 1.3; }
-    .col-contacts { order: 3; flex: 0 0 auto; min-width: 0; text-align: right; line-height: 1.3; }
+    .col-contacts { order: 3; flex: 0 0 auto; min-width: 0; text-align: right; line-height: 1.3; display: flex; flex-direction: row; gap: 24px; }
     .header-gutter { display: none; }
     
     .divider { order: 4; margin-top: 40px; margin-bottom: 40px; }
     
     .col-spacer { display: none; }
-    .email-link, .email-br { display: none; } 
+    .email-br, .email-full { display: none; }
+    .email-link, .email-short { display: inline; }
     .col-hero { order: 5; flex: 0 0 100%; margin-top: 0; margin-bottom: 80px; }
+    .col-hero a { display: none; }
+    .hero-role-long { display: none; }
+    .hero-role-short { display: inline; }
     
     h1 { font-size: 24px; max-width: 550px; margin-top: 0; }
     h2 { font-size: 24px; letter-spacing: -0.03em; line-height: 1.3; }
@@ -480,14 +486,9 @@ h2.side-quests-title {
     
     .process { display: none; }
     
-    .projects { gap: 80px; margin-bottom: 40px; max-width: 550px; }
+    .projects { gap: 80px; margin-bottom: 80px; max-width: 550px; }
     .project-image { border-radius: 3px; margin-bottom: 16px; }
     .project-image img { border-radius: 3px; }
-    body:not(.is-safari) .img-hover-wrap {
-        filter: drop-shadow(0 0 6px rgba(var(--shadow), 0.10))
-                drop-shadow(10px 10px 16px rgba(var(--shadow), 0.08))
-                drop-shadow(24px 24px 30px rgba(var(--shadow), 0.07));
-    }
     .project-text { flex-direction: column; }
     .project-left, .project-right { width: 100%; padding-right: 0; }
     .project-right { padding-top: 0; }
@@ -498,13 +499,47 @@ h2.side-quests-title {
 
     .side-quests-header { margin-bottom: 32px; }
 
-    .footer-grid { flex-direction: column; align-items: center; text-align: center; border-top: none; gap: 4px; }
-    .footer-left { display: none; }
-    .footer-center img { width: 180px; padding-bottom: 8px; }
-    .footer-right { display: none; }
-    .footer-links { align-items: center; }
-    .footer-center { order: -1; }
-    .footer-bio { margin-top: 40px; }
+    .footer-grid {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-areas:
+            "mascots mascots"
+            "email links";
+        align-items: baseline;
+        border-top: none;
+        padding-top: 0;
+        gap: 0;
+        text-align: left;
+    }
+    .footer-center {
+        grid-area: mascots;
+        justify-content: center;
+        margin-bottom: 80px;
+    }
+    .footer-center img { width: 180px; padding-bottom: 0; }
+    .footer-left {
+        display: block;
+        grid-area: email;
+    }
+    .footer-left > span,
+    .footer-left br { display: none; }
+    .footer-right {
+        display: flex;
+        justify-content: flex-end;
+        grid-area: links;
+    }
+    .footer-links {
+        flex-direction: row;
+        align-items: baseline;
+        gap: 24px;
+    }
+    .footer-bio { margin-top: 28px; }
+}
+
+/* 700–900: мобильная сетка, но ещё десктопная херо-картинка — больше воздуха вокруг текста */
+@media (min-width: 701px) and (max-width: 900px) {
+    .divider { margin-bottom: 80px; }
+    .col-hero { margin-bottom: 100px; }
 }
 
 @media (max-width: 700px) {

@@ -8,7 +8,7 @@
     <meta name="author" content="Валентин Филиппов">
     <link rel="canonical" href="https://cv.around.design/">
     <link href="images/favicon.png" rel="icon">
-    <link rel="stylesheet" href="style.css?v=53">
+    <link rel="stylesheet" href="style.css?v=59">
 
     <!-- Open Graph -->
     <meta property="og:type" content="profile">
@@ -50,7 +50,7 @@
             </div>
             <div class="header-gutter" aria-hidden="true"></div>
             <div class="col-contacts">
-                <a href="mailto:letters@around.design" class="email-link">letters@around.design</a><br class="email-br">
+                <a href="mailto:letters@around.design" class="email-link"><span class="email-full">letters@around.design</span><span class="email-short">email</span></a><br class="email-br">
                 <a href="files/Valentin Filippov CV.pdf" target="_blank" rel="noopener noreferrer" class="cv-link" data-i18n="cv" data-i18n-href="cv_link">CV <span class="arrow">↗</span></a>
             </div>
             <div class="header-gutter" aria-hidden="true"></div>
@@ -58,7 +58,7 @@
                 <a href="#" id="lang-toggle" class="pseudo-link">eng</a>
             </div>
             <div class="col-hero">
-                <h1 data-i18n="hero">Дизайнер цифровых&nbsp;продуктов. Проектирую&nbsp;удобные инструменты для&nbsp;людей &#151; от&nbsp;идеи до запуска. <a href="mailto:letters@around.design">Связаться</a></h1>
+                <h1 data-i18n="hero"><span class="hero-role-long">Дизайнер цифровых&nbsp;продуктов</span><span class="hero-role-short">Дизайнер&nbsp;продукта</span>. Проектирую&nbsp;удобные инструменты для&nbsp;людей &#151; от&nbsp;идеи до запуска. <a href="mailto:letters@around.design">Связаться</a></h1>
             </div>
             
             <div class="divider container-wide fade-in delay-2">
@@ -72,7 +72,7 @@
                 <p data-i18n="process_1">1&ensp;Исследую пользователей и&nbsp;предметную область, уточняю видение проекта.</p>
             </div>
             <div class="process-step">
-                <p data-i18n="process_2">2&ensp;Проектирую варианты дизайна, делаю и тестирую прототипы.</p>
+                <p data-i18n="process_2">2&ensp;Проектирую варианты дизайна, прототипирую и тестирую их.</p>
             </div>
             <div class="process-step">
                 <p data-i18n="process_3">3&ensp;Финализирую дизайн, передаю разработчикам, сопровождаю запуск.</p>
@@ -209,7 +209,6 @@
                     </div>
                     <div class="project-right" data-i18n="plates_desc">
                         <p>Современный стандарт российских автомобильных знаков был принят в&nbsp;1993 году. После 30 лет использования он заслуживает редизайна, который бы устранил его ограничения и&nbsp;недостатки.</p>
-                        <p>В этом исследовании я анализирую накопившиеся проблемы стандарта и&nbsp;предлагаю новый вариант.</p>
                     </div>
                 </div>
             </div>
@@ -220,7 +219,7 @@
             <div class="footer-grid">
                 <div class="footer-left">
                     <span data-i18n="footer_name">Валентин Филиппов</span><br>
-                    <a href="mailto:letters@around.design">letters@around.design</a>
+                    <a href="mailto:letters@around.design"><span class="email-full">letters@around.design</span><span class="email-short">email</span></a>
                 </div>
                 <div class="footer-center">
                     <img src="images/footer-mascots.svg" alt="Footer Logo">
@@ -234,8 +233,8 @@
             </div>
 
             <div class="footer-bio" data-i18n="bio">
-                <p>Как только в&nbsp;детстве у меня появился компьютер, мне захотелось создавать что-нибудь с его помощью. Начал с&nbsp;простых программ, потом перешел к&nbsp;веб-дизайну и&nbsp;дизайну приложений.</p>
-                <p>Во всех проектах стараюсь сделать сложное простым. Большинству людей трудно пользоваться приложениями. Мне всегда хотелось помочь им.</p>
+                <p>Первый компьютер появился у меня в&nbsp;9 лет. Сразу захотелось создавать на нём что-нибудь. Начал с&nbsp;программ на Turbo Pascal, потом перешёл к&nbsp;веб-дизайну и&nbsp;дизайну приложений.</p>
+                <p>В дизайне стараюсь сделать сложное простым. Большинству людей смартфоны и компьютеры даются трудно. Всегда старался помочь им.</p>
                 <p>Помимо дизайна люблю музыку, географические карты, горные походы и&nbsp;города с&nbsp;историей.</p>
             </div>
         </footer>
@@ -253,14 +252,12 @@
 
             // Тень по альфе через SVG feGaussianBlur (SourceAlpha картинки).
             function initSafariImageShadows() {
-                const BASE_PAD = 40;
-                const BASE_LAYERS = [
-                    [0, 0, 3, 0.10],
-                    [5, 5, 8, 0.08],
-                    [12, 12, 15, 0.07]
+                const PAD = 80;
+                const LAYERS = [
+                    [0, 0, 6, 0.10],
+                    [10, 10, 16, 0.08],
+                    [24, 24, 30, 0.07]
                 ];
-                const mobileShadow = window.matchMedia('(max-width: 900px)');
-                const shadowScale = () => (mobileShadow.matches ? 2 : 1);
                 const svgNS = 'http://www.w3.org/2000/svg';
                 const xlinkNS = 'http://www.w3.org/1999/xlink';
 
@@ -284,18 +281,12 @@
                     const cssH = Math.round(img.getBoundingClientRect().height);
                     if (!img.naturalWidth || cssW < 2 || cssH < 2) return false;
 
-                    const scale = shadowScale();
-                    const pad = BASE_PAD * scale;
-                    const layers = BASE_LAYERS.map(([dx, dy, blur, alpha]) => [
-                        dx * scale, dy * scale, blur * scale, alpha
-                    ]);
-
-                    const w = cssW + pad * 2;
-                    const h = cssH + pad * 2;
+                    const w = cssW + PAD * 2;
+                    const h = cssH + PAD * 2;
                     holder.style.width = w + 'px';
                     holder.style.height = h + 'px';
-                    holder.style.left = -pad + 'px';
-                    holder.style.top = -pad + 'px';
+                    holder.style.left = -PAD + 'px';
+                    holder.style.top = -PAD + 'px';
                     svg.setAttribute('width', w);
                     svg.setAttribute('height', h);
                     svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
@@ -311,7 +302,7 @@
                         'color-interpolation-filters': 'sRGB'
                     });
 
-                    layers.forEach(([dx, dy, blur, alpha], i) => {
+                    LAYERS.forEach(([dx, dy, blur, alpha], i) => {
                         filter.append(
                             svgEl('feOffset', { in: 'SourceAlpha', dx: String(dx), dy: String(dy), result: 'off' + i }),
                             svgEl('feGaussianBlur', { in: 'off' + i, stdDeviation: String(blur / 2), result: 'blur' + i }),
@@ -321,7 +312,7 @@
                     });
 
                     const merge = svgEl('feMerge', {});
-                    layers.forEach((_, i) => merge.appendChild(svgEl('feMergeNode', { in: 's' + i })));
+                    LAYERS.forEach((_, i) => merge.appendChild(svgEl('feMergeNode', { in: 's' + i })));
                     filter.appendChild(merge);
 
                     const defs = svgEl('defs', {});
@@ -330,8 +321,8 @@
                     const src = img.getAttribute('src');
                     const image = svgEl('image', {
                         href: src,
-                        x: String(pad),
-                        y: String(pad),
+                        x: String(PAD),
+                        y: String(PAD),
                         width: String(cssW),
                         height: String(cssH),
                         filter: `url(#${uid})`,
@@ -371,7 +362,7 @@
                     const update = () => {
                         if (!img.naturalWidth) return;
                         const rect = img.getBoundingClientRect();
-                        const key = `${Math.round(rect.width)}x${Math.round(rect.height)}@${shadowScale()}`;
+                        const key = `${Math.round(rect.width)}x${Math.round(rect.height)}`;
                         if (key === lastKey) return;
                         if (paint(holder, svg, img, rgb, uid)) lastKey = key;
                     };
@@ -384,10 +375,6 @@
                         resizeTimer = setTimeout(update, 150);
                     });
                     ro.observe(img);
-                    mobileShadow.addEventListener('change', () => {
-                        lastKey = '';
-                        update();
-                    });
                 });
             }
 
@@ -473,7 +460,6 @@
                     plates_link: "https://around.design/projects/russian-license-plates/",
                     plates_desc: `
                         <p>The current Russian license plates design was introduced in 1993. After 30 years in use, it deserves a redesign that would solve its limitations and flaws.</p>
-                        <p>In this study, I review the history of the Russian licence plates, explore the drawbacks of the current design and propose a new one.</p>
                     `,
 
                     footer_name: "Valentin Filippov",
