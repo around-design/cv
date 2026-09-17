@@ -1,0 +1,17 @@
+{
+  "name": "CV / portfolio",
+  "install": "true",
+  "terminals": [
+    {
+      "name": "preview",
+      "command": "python3 -m http.server 8080 --bind 0.0.0.0",
+      "description": "Static preview of the CV site at http://127.0.0.1:8080. Do not start a second server on port 8080. After HTML/CSS changes, refresh the browser."
+    }
+  ],
+  "ports": [
+    {
+      "name": "web",
+      "port": 8080
+    }
+  ]
+}
