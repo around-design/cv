@@ -1,7 +1,7 @@
 // Puts the hero scene into the divider of the page, in place of the flat drawing.
 // Desktop and tablet only: below 700px the layout uses the narrow mobile picture,
 // which this scene does not match yet.
-import { mountHero, params } from "./hero-scene.js";
+import { mountHero, params } from "./hero-scene.js?v=2";
 
 const box = document.getElementById("hero-3d");
 const divider = box && box.closest(".divider");

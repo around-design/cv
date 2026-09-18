@@ -1,7 +1,7 @@
 // Draws the hero shape as an SVG: the scene is line art with a handful of flat
 // faces, so projecting it by hand every frame is cheaper than an engine, and the
 // page gets the drawing in a couple of kilobytes instead of a megabyte.
-import { params, buildShape, W, H } from "./hero-shape.js";
+import { params, buildShape, W, H } from "./hero-shape.js?v=2";
 
 export { params };
 
@@ -100,17 +100,19 @@ export function mountHero({ mount, orbit = false, overlaySrc = null, padX = 1.12
         const zy = sa;
         const zz = ca * cb;
 
-        const { xs, ys, zs, n } = shape.line;
-        const d = new Array(n);
-        for (let i = 0; i < n; i++) {
-            const x = xs[i];
-            const y = ys[i];
-            const z = zs[i];
-            d[i] =
-                (i ? "L" : "M") +
-                round(xx * x + xz * z) +
-                " " +
-                round(yx * x + yy * y + yz * z);
+        const { start, cubics, n } = shape.line;
+        const xy = (x, y, z) =>
+            round(xx * x + xz * z) + " " + round(yx * x + yy * y + yz * z);
+        const d = ["M" + xy(start[0], start[1], start[2])];
+        for (let i = 0, k = 0; k < n; k++, i += 9) {
+            d.push(
+                "C" +
+                    xy(cubics[i], cubics[i + 1], cubics[i + 2]) +
+                    " " +
+                    xy(cubics[i + 3], cubics[i + 4], cubics[i + 5]) +
+                    " " +
+                    xy(cubics[i + 6], cubics[i + 7], cubics[i + 8])
+            );
         }
         linePath.setAttribute("d", d.join(""));
 

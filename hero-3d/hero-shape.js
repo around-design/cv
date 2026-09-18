@@ -80,6 +80,44 @@ const STAR_TIPS = (() => {
     return tips;
 })();
 
+function parseCubics(d) {
+    const toks = d.match(/[A-Za-z]|[-+]?(?:\d*\.\d+|\d+)(?:e[-+]?\d+)?/gi);
+    const cubics = [];
+    let k = 0;
+    let cmd = "L";
+    let x = 0;
+    let y = 0;
+    const num = () => Number(toks[k++]);
+    while (k < toks.length) {
+        const t = toks[k];
+        if (t >= "A") {
+            cmd = t;
+            k += 1;
+            continue;
+        }
+        if (cmd === "M") {
+            x = num();
+            y = num();
+            cmd = "L";
+        } else if (cmd === "C") {
+            const x1 = num();
+            const y1 = num();
+            const x2 = num();
+            const y2 = num();
+            const x3 = num();
+            const y3 = num();
+            cubics.push([x, y, x1, y1, x2, y2, x3, y3]);
+            x = x3;
+            y = y3;
+        } else {
+            throw new Error(cmd);
+        }
+    }
+    return cubics;
+}
+
+const LINE_CUBICS = parseCubics(G.linePath);
+
 function sampleLinePath(d, spacing = 3.2) {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -244,52 +282,6 @@ function lineDepth(stroke, tailZ) {
     soft[0] = 0;
     soft[n - 1] = tailZ;
     return soft;
-}
-
-function segmentDistance(p, a, b) {
-    const abx = b[0] - a[0];
-    const aby = b[1] - a[1];
-    const abz = b[2] - a[2];
-    const len2 = abx * abx + aby * aby + abz * abz;
-    let t = 0;
-    if (len2 > 1e-9) {
-        t = ((p[0] - a[0]) * abx + (p[1] - a[1]) * aby + (p[2] - a[2]) * abz) / len2;
-        t = Math.min(1, Math.max(0, t));
-    }
-    return Math.hypot(p[0] - (a[0] + abx * t), p[1] - (a[1] + aby * t), p[2] - (a[2] + abz * t));
-}
-
-// The path is sampled far denser than a 3-unit stroke can show. Thinning it keeps
-// the curve within eps of the original while cutting the work of every frame;
-// eps holds in the projection too, whichever way the scene is turned.
-const LINE_EPS = 0.5;
-
-function simplify(points, eps) {
-    const n = points.length;
-    if (n < 3) return points.slice();
-    const keep = new Uint8Array(n);
-    keep[0] = 1;
-    keep[n - 1] = 1;
-    const stack = [[0, n - 1]];
-    while (stack.length) {
-        const [a, b] = stack.pop();
-        let worst = -1;
-        let worstD = eps;
-        for (let i = a + 1; i < b; i++) {
-            const d = segmentDistance(points[i], points[a], points[b]);
-            if (d > worstD) {
-                worstD = d;
-                worst = i;
-            }
-        }
-        if (worst > 0) {
-            keep[worst] = 1;
-            stack.push([a, worst], [worst, b]);
-        }
-    }
-    const out = [];
-    for (let i = 0; i < n; i++) if (keep[i]) out.push(points[i]);
-    return out;
 }
 
 function sub(a, b) {
@@ -458,22 +450,73 @@ function planeVerts() {
     return out;
 }
 
-// Everything the renderer needs, in scene coordinates: one polyline, one black
+function zAt(zs, i) {
+    const n = zs.length;
+    if (i <= 0) return zs[0];
+    if (i >= n - 1) return zs[n - 1];
+    const j = Math.floor(i);
+    const t = i - j;
+    return zs[j] * (1 - t) + zs[j + 1] * t;
+}
+
+// Walk the sampled stroke forward until it sits on (x, y).
+function advanceTo(pts, i, x, y) {
+    let best = i;
+    let bestD = (pts[i][0] - x) ** 2 + (pts[i][1] - y) ** 2;
+    for (let k = i + 1; k < pts.length; k++) {
+        const d = (pts[k][0] - x) ** 2 + (pts[k][1] - y) ** 2;
+        if (d <= bestD) {
+            bestD = d;
+            best = k;
+        } else if (k - best > 6) break;
+    }
+    return best;
+}
+
+// Control z that makes the cubic pass through the sampled depth at t = 0, 1/3, 2/3, 1.
+function cubicControlZ(z0, z13, z23, z1) {
+    const A = (27 * z13 - 8 * z0 - z1) / 6;
+    const B = (27 * z23 - z0 - 8 * z1) / 6;
+    return [(2 * A - B) / 3, (2 * B - A) / 3];
+}
+
+function lineShape(zs) {
+    const start2 = LINE_CUBICS[0];
+    const start = to3(start2[0], start2[1], zs[0]);
+    const cubics = new Float32Array(LINE_CUBICS.length * 9);
+    let i0 = 0;
+    let w = 0;
+    for (const c of LINE_CUBICS) {
+        const a = advanceTo(line2d, i0, c[0], c[1]);
+        const b = advanceTo(line2d, a, c[6], c[7]);
+        i0 = b;
+        const z0 = zs[a];
+        const z3 = zs[b];
+        const span = b - a;
+        const [z1, z2] = cubicControlZ(z0, zAt(zs, a + span / 3), zAt(zs, a + (2 * span) / 3), z3);
+        const p1 = to3(c[2], c[3], z1);
+        const p2 = to3(c[4], c[5], z2);
+        const p3 = to3(c[6], c[7], z3);
+        cubics[w] = p1[0];
+        cubics[w + 1] = p1[1];
+        cubics[w + 2] = p1[2];
+        cubics[w + 3] = p2[0];
+        cubics[w + 4] = p2[1];
+        cubics[w + 5] = p2[2];
+        cubics[w + 6] = p3[0];
+        cubics[w + 7] = p3[1];
+        cubics[w + 8] = p3[2];
+        w += 9;
+    }
+    return { start, cubics, n: LINE_CUBICS.length };
+}
+
+// Everything the renderer needs, in scene coordinates: one cubic stroke, one black
 // silhouette, four white faces. Rebuilt whenever a slider moves.
 export function buildShape() {
     const v = planeVerts();
     const zs = lineDepth(line2d, v.tailZ);
-    const pts = simplify(
-        line2d.map(([x, y], i) => to3(x, y, zs[i])),
-        LINE_EPS
-    );
-    const n = pts.length;
-    const line = { n, xs: new Float32Array(n), ys: new Float32Array(n), zs: new Float32Array(n) };
-    for (let i = 0; i < n; i++) {
-        line.xs[i] = pts[i][0];
-        line.ys[i] = pts[i][1];
-        line.zs[i] = pts[i][2];
-    }
+    const line = lineShape(zs);
     // Each face is drawn as a stroked triangle, and the three sides of these four
     // happen to be exactly the nine folds of the dart — so the creases come for
     // free, and a nearer face hides the ones behind it.
