@@ -8,7 +8,7 @@
     <meta name="author" content="Валентин Филиппов">
     <link rel="canonical" href="https://cv.around.design/">
     <link href="images/favicon.png" rel="icon">
-    <link rel="stylesheet" href="style.css?v=59">
+    <link rel="stylesheet" href="style.css?v=60">
 
     <!-- Open Graph -->
     <meta property="og:type" content="profile">
@@ -64,6 +64,7 @@
             <div class="divider container-wide fade-in delay-2">
                 <img src="images/chart-desktop.svg" alt="" class="svg-desktop">
                 <img src="images/chart-mobile.svg" alt="" class="svg-mobile">
+                <div class="hero-3d" id="hero-3d" aria-hidden="true"></div>
             </div>
         </header>
 
@@ -572,5 +573,16 @@
             setLanguage(currentLang);
         });
     </script>
+
+    <!-- Трёхмерный герой: заменяет chart-desktop.svg, настраивается в hero-3d/index.html -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "./hero-3d/vendor/three.module.min.js",
+            "three/addons/": "./hero-3d/vendor/addons/"
+        }
+    }
+    </script>
+    <script type="module" src="hero-3d/hero-site.js?v=1"></script>
 </body>
 </html>

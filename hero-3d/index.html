@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hero 3D — настройка</title>
+    <style>
+        :root {
+            --ink: #24221f;
+            --bg: #ffffff;
+            --muted: #7a756e;
+            --line: #e6e2dc;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; }
+        body {
+            font-family: "Formular Neutral", system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--ink);
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            min-height: 100%;
+        }
+        aside {
+            border-right: 1px solid var(--line);
+            padding: 28px 22px 40px;
+            overflow-y: auto;
+        }
+        h1 {
+            font-size: 18px;
+            font-weight: 400;
+            letter-spacing: -0.03em;
+            margin-bottom: 6px;
+        }
+        .hint {
+            font-size: 13px;
+            color: var(--muted);
+            line-height: 1.4;
+            margin-bottom: 22px;
+        }
+        fieldset {
+            border: 0;
+            margin-bottom: 18px;
+        }
+        legend {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--muted);
+            margin-bottom: 8px;
+        }
+        label.row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 8px;
+            align-items: center;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+        label.row span.val {
+            font-variant-numeric: tabular-nums;
+            color: var(--muted);
+            min-width: 36px;
+            text-align: right;
+        }
+        input[type="range"] { width: 100%; }
+        .checks { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+        .checks label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+        button {
+            appearance: none;
+            border: 1px solid var(--ink);
+            background: transparent;
+            color: var(--ink);
+            font: inherit;
+            font-size: 13px;
+            padding: 8px 12px;
+            cursor: pointer;
+            margin-right: 6px;
+            margin-top: 4px;
+        }
+        button:hover { background: var(--ink); color: var(--bg); }
+        #view {
+            position: relative;
+            min-height: 100%;
+            background: var(--bg);
+        }
+        canvas { display: block; width: 100%; height: 100%; }
+        #overlay-note {
+            position: absolute;
+            left: 24px;
+            bottom: 20px;
+            font-size: 12px;
+            color: var(--muted);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <aside>
+        <h1>Hero 3D</h1>
+        <p class="hint">Панель настройки той же сцены, что стоит на сайте. Значения по умолчанию лежат в <code>hero-scene.js</code> — ползунки стартуют с них; чтобы зафиксировать новые, перенеси их туда.</p>
+
+        <fieldset>
+            <legend>Поворот</legend>
+            <label class="row">Слежение <span class="val" id="v-follow"></span></label>
+            <input id="follow" type="range" min="0" max="45" step="0.5" value="14">
+            <label class="row">Сглаживание <span class="val" id="v-ease"></span></label>
+            <input id="ease" type="range" min="0.02" max="0.25" step="0.01" value="0.08">
+            <div class="checks" style="margin-top:10px">
+                <label><input id="followOn" type="checkbox" checked> Курсор двигает сцену</label>
+                <label><input id="autoSpin" type="checkbox"> Автоповорот</label>
+            </div>
+            <button id="reset" type="button">Спереди</button>
+        </fieldset>
+
+        <fieldset>
+            <legend>Клубок</legend>
+            <label class="row">Глубина шара <span class="val" id="v-ballDepth"></span></label>
+            <input id="ballDepth" type="range" min="0" max="1.5" step="0.05" value="0.8">
+            <label class="row">Расплетание <span class="val" id="v-ballTwist"></span></label>
+            <input id="ballTwist" type="range" min="0" max="0.5" step="0.01" value="0.16">
+        </fieldset>
+
+        <fieldset>
+            <legend>Зигзаг</legend>
+            <label class="row">Разнос витков <span class="val" id="v-zig"></span></label>
+            <input id="zig" type="range" min="0" max="80" step="1" value="0">
+        </fieldset>
+
+        <fieldset>
+            <legend>Звезда</legend>
+            <label class="row">Лучи в глубину <span class="val" id="v-starDepth"></span></label>
+            <input id="starDepth" type="range" min="0.4" max="1.6" step="0.05" value="1">
+            <label class="row">Толщина лучей <span class="val" id="v-starThick"></span></label>
+            <input id="starThick" type="range" min="2" max="10" step="0.5" value="6">
+        </fieldset>
+
+        <fieldset>
+            <legend>Самолёт</legend>
+            <label class="row">Размер <span class="val" id="v-size"></span></label>
+            <input id="size" type="range" min="0.6" max="2" step="0.05" value="1">
+            <label class="row">Ширина крыла <span class="val" id="v-wingW"></span></label>
+            <input id="wingW" type="range" min="0.1" max="0.9" step="0.01" value="0.46">
+            <label class="row">Ширина впадины <span class="val" id="v-valleyW"></span></label>
+            <input id="valleyW" type="range" min="0.02" max="0.4" step="0.01" value="0.11">
+            <label class="row">Глубина впадины <span class="val" id="v-valleyH"></span></label>
+            <input id="valleyH" type="range" min="0.05" max="0.6" step="0.01" value="0.23">
+            <label class="row">Отступ от линии <span class="val" id="v-gap"></span></label>
+            <input id="gap" type="range" min="0" max="60" step="1" value="14">
+        </fieldset>
+
+        <fieldset>
+            <legend>Ракурс самолёта</legend>
+            <label class="row">Поворот <span class="val" id="v-yaw"></span></label>
+            <input id="yaw" type="range" min="-45" max="45" step="1" value="0">
+            <label class="row">Хвост ниже <span class="val" id="v-pitch"></span></label>
+            <input id="pitch" type="range" min="-45" max="45" step="1" value="0">
+            <label class="row">Крен <span class="val" id="v-roll"></span></label>
+            <input id="roll" type="range" min="-45" max="45" step="1" value="0">
+        </fieldset>
+
+        <fieldset>
+            <legend>Линия</legend>
+            <label class="row">Толщина <span class="val" id="v-width"></span></label>
+            <input id="width" type="range" min="1" max="8" step="0.25" value="3">
+        </fieldset>
+
+        <fieldset>
+            <legend>Сверка</legend>
+            <div class="checks">
+                <label><input id="overlay" type="checkbox"> Исходник поверх</label>
+                <label><input id="edges" type="checkbox"> Рёбра сеток</label>
+            </div>
+            <label class="row">Прозрачность исходника <span class="val" id="v-overlayOp"></span></label>
+            <input id="overlayOp" type="range" min="0" max="1" step="0.05" value="0.45">
+        </fieldset>
+    </aside>
+    <div id="view">
+        <div id="overlay-note">hero-3d · ортография, вид как на сайте</div>
+    </div>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "./vendor/three.module.min.js",
+            "three/addons/": "./vendor/addons/"
+        }
+    }
+    </script>
+    <script type="module" src="scene.js"></script>
+</body>
+</html>

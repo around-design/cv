@@ -138,6 +138,28 @@ h1 {
 .svg-desktop { display: block; width: 100%; max-width: 100%; height: auto; }
 .svg-mobile { display: none; }
 
+/* Трёхмерная версия разделителя. Пока сцена не поднялась, в потоке остаётся SVG. */
+.hero-3d {
+    display: none;
+    position: relative;
+    align-self: flex-start;
+    width: 100%;
+    aspect-ratio: 1577 / 589;
+}
+
+.divider.hero-3d-on .hero-3d { display: block; }
+.divider.hero-3d-on .svg-desktop { display: none; }
+
+/* Холст с запасом по краям: при наклоне сцене есть куда выйти за рамку рисунка. */
+.hero-3d canvas {
+    position: absolute;
+    left: -4%;
+    top: -8%;
+    width: 108%;
+    height: 116%;
+    pointer-events: none;
+}
+
 /* --- ПРОЦЕСС (3 ШАГА) --- */
 .process {
     display: grid;
@@ -473,13 +495,22 @@ h2.side-quests-title {
     .side-quests-line { height: 28px; top: 6px; }
     .side-quests-line path { stroke-width: 1.5px; }
 
-    .svg-desktop { 
-        display: block; 
-        width: 118%; 
-        max-width: none; 
-        flex-shrink: 0; 
+    .svg-desktop {
+        display: block;
+        width: 118%;
+        max-width: none;
+        flex-shrink: 0;
         height: auto;
         position: relative;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+
+    /* Трёхмерный герой выходит за поля так же, как плоская картинка. */
+    .hero-3d {
+        width: 118%;
+        max-width: none;
+        flex-shrink: 0;
         left: 50%;
         transform: translateX(-50%);
     }
@@ -545,6 +576,8 @@ h2.side-quests-title {
 @media (max-width: 700px) {
     .page-wrapper { padding: 16px; }
     .svg-desktop { display: none; }
+    /* В мобиле рисунок другой, сжатый по ширине — сцену не показываем. */
+    .divider.hero-3d-on .hero-3d { display: none; }
     .svg-mobile { 
         display: block; 
         width: 120%; 
