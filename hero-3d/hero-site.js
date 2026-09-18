@@ -55,6 +55,13 @@ function leash(p, a) {
 function onMove(e) {
     if (!hero) return;
     const r = box.getBoundingClientRect();
+    // Hit-test the box ourselves: the drawing inside has pointer-events: none so
+    // it never steals clicks from the header, and Safari would otherwise let the
+    // cursor fall through the empty container without a pointermove on the box.
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) {
+        if (anchor) onLeave();
+        return;
+    }
     const px = ((e.clientX - r.left) / r.width) * 2 - 1;
     const py = ((e.clientY - r.top) / r.height) * 2 - 1;
     if (!anchor) {
@@ -84,7 +91,7 @@ if (box && divider) {
         params.followOn = !calm.matches;
         if (hero && calm.matches) hero.front();
     });
-    box.addEventListener("pointermove", onMove, { passive: true });
-    box.addEventListener("pointerleave", onLeave);
+    window.addEventListener("pointermove", onMove, { passive: true });
+    window.addEventListener("blur", onLeave);
     sync();
 }
