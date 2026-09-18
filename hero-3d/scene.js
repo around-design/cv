@@ -1,6 +1,6 @@
-// Tuning panel for the hero scene. The scene itself, and every value it is set
-// to, live in hero-scene.js — this file only wires the sliders to them, so the
-// panel and the site always show the same thing.
+// Tuning panel for the hero scene. The scene is drawn by hero-scene.js and every
+// value it is set to lives in hero-shape.js — this file only wires the sliders to
+// them, so the panel and the site always show the same thing.
 import { mountHero, params } from "./hero-scene.js";
 
 const el = (id) => document.getElementById(id);
@@ -42,19 +42,17 @@ for (const key of SLIDERS) {
     input.addEventListener("input", () => {
         paint();
         if (!LIVE.has(key)) hero.rebuild();
-        else if (key === "overlayOp" && hero.overlayMesh) {
-            hero.overlayMesh.material.opacity = params.overlayOp;
-        }
+        else if (key === "overlayOp") hero.updateOverlay();
     });
     paint();
 }
 
-for (const id of ["followOn", "autoSpin", "overlay", "edges"]) {
+for (const id of ["followOn", "autoSpin", "overlay"]) {
     const input = el(id);
     input.checked = params[id];
     input.addEventListener("change", () => {
         params[id] = input.checked;
-        if (id === "overlay" || id === "edges") hero.rebuild();
+        if (id === "overlay") hero.updateOverlay();
     });
 }
 

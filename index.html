@@ -8,7 +8,11 @@
     <meta name="author" content="Валентин Филиппов">
     <link rel="canonical" href="https://cv.around.design/">
     <link href="images/favicon.png" rel="icon">
-    <link rel="stylesheet" href="style.css?v=60">
+    <link rel="stylesheet" href="style.css?v=61">
+    <link rel="modulepreload" href="hero-3d/hero-site.js?v=2">
+    <link rel="modulepreload" href="hero-3d/hero-scene.js">
+    <link rel="modulepreload" href="hero-3d/hero-shape.js">
+    <link rel="modulepreload" href="hero-3d/geometry.js">
 
     <!-- Open Graph -->
     <meta property="og:type" content="profile">
@@ -575,14 +579,6 @@
     </script>
 
     <!-- Трёхмерный герой: заменяет chart-desktop.svg, настраивается в hero-3d/index.html -->
-    <script type="importmap">
-    {
-        "imports": {
-            "three": "./hero-3d/vendor/three.module.min.js",
-            "three/addons/": "./hero-3d/vendor/addons/"
-        }
-    }
-    </script>
-    <script type="module" src="hero-3d/hero-site.js?v=1"></script>
+    <script type="module" src="hero-3d/hero-site.js?v=2"></script>
 </body>
 </html>

@@ -138,26 +138,29 @@ h1 {
 .svg-desktop { display: block; width: 100%; max-width: 100%; height: auto; }
 .svg-mobile { display: none; }
 
-/* Трёхмерная версия разделителя. Пока сцена не поднялась, в потоке остаётся SVG. */
+/* Трёхмерная версия разделителя. Пока скрипт не нарисовал сцену, в потоке остаётся плоский SVG. */
 .hero-3d {
     display: none;
     position: relative;
     align-self: flex-start;
     width: 100%;
     aspect-ratio: 1577 / 589;
+    overflow: visible;
 }
 
 .divider.hero-3d-on .hero-3d { display: block; }
 .divider.hero-3d-on .svg-desktop { display: none; }
 
-/* Холст с запасом по краям: при наклоне сцене есть куда выйти за рамку рисунка. */
-.hero-3d canvas {
+/* Запас по краям: при наклоне сцене есть куда выйти за рамку рисунка. */
+.hero-3d svg {
     position: absolute;
     left: -4%;
     top: -8%;
     width: 108%;
     height: 116%;
     pointer-events: none;
+    overflow: visible;
+    display: block;
 }
 
 /* --- ПРОЦЕСС (3 ШАГА) --- */

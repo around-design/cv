@@ -8,9 +8,9 @@ const divider = box && box.closest(".divider");
 const wide = window.matchMedia("(min-width: 701px)");
 const calm = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-// The canvas is a touch larger than the drawing's box on every side, so tilting
-// has room; the frustum padding below matches that bleed, which keeps the drawing
-// exactly the size the flat SVG was.
+// The drawing's own box is the size the flat SVG was; the live drawing around it
+// is a touch larger on every side, so a tilt has room to lean out. The padding
+// below matches that bleed, which keeps the drawing itself the same size as before.
 const PAD_X = 1.08;
 const PAD_Y = 1.16;
 
@@ -18,12 +18,12 @@ let hero = null;
 
 function start() {
     if (hero || !box || !divider) return;
-    divider.classList.add("hero-3d-on");
     try {
-        hero = mountHero({ mount: box, padX: PAD_X, padY: PAD_Y, transparent: true });
+        hero = mountHero({ mount: box, padX: PAD_X, padY: PAD_Y });
+        // Swap only after the first frame is already in the DOM, so the flat
+        // drawing is not replaced by an empty box.
+        divider.classList.add("hero-3d-on");
     } catch (err) {
-        // No WebGL, no scene: the flat drawing stays where it was.
-        divider.classList.remove("hero-3d-on");
         hero = null;
     }
 }
