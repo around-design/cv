@@ -212,12 +212,15 @@ a.project-image-link { border-bottom: none; display: block; }
     --sketch-solid: calc(var(--s1) / var(--m) * 100%);
 }
 
-.project-image img {
+.project-image img:not(.img-shadow) {
     grid-area: 1 / 1;
     width: 100%;
     height: auto;
     display: block;
     border-radius: 8px;
+}
+
+body:not(.is-safari) .project-image img:not(.img-shadow) {
     transform: translateZ(0);
 }
 
@@ -260,22 +263,25 @@ body.is-safari .img-base {
     transition: opacity var(--fade-dur) ease-in-out;
 }
 
-/* Сафари: SVG-тень рядом с фото, не CSS filter и не canvas. */
-.img-shadow {
+/* Сафари: запечённый растр-сосед, не CSS filter и не живой SVG. */
+body.is-safari .project-image {
+    border-radius: 0;
+    overflow: visible;
+}
+
+.project-image .img-shadow {
     grid-area: 1 / 1;
     position: absolute;
     z-index: 1;
     display: block;
+    width: auto;
+    max-width: none;
+    height: auto;
+    border-radius: 0;
     overflow: visible;
     pointer-events: none;
     opacity: 0;
     transition: opacity var(--fade-dur) ease-in-out;
-}
-
-/* Не гасить до 0: Сафари выгружает SVG-фильтр, и первый fade снова рывок. */
-body.is-safari .img-shadow {
-    opacity: 0.01;
-    will-change: opacity;
 }
 
 /* Цвет тени — по фону картинки, с которым тень соприкасается. */
@@ -288,7 +294,7 @@ body.is-safari .img-shadow {
 .project-homestead { --shadow: 92, 78, 55; }    /* тёплый янтарь #E8E4E0 */
 .project-plates { --shadow: 95, 42, 42; }       /* серый #F0F0F0 + красный #90240C */
 
-/* CSS-тень по альфе — везде, кроме Сафари (там SVG). */
+/* CSS-тень по альфе — везде, кроме Сафари (там запечённый растр). */
 body:not(.is-safari) .img-hover-wrap {
     filter: drop-shadow(0 0 6px rgba(var(--shadow), 0.10))
             drop-shadow(10px 10px 16px rgba(var(--shadow), 0.08))
@@ -310,11 +316,6 @@ body:not(.is-safari) .img-hover-wrap {
     .project:hover .img-shadow {
         opacity: 1;
     }
-
-    /* Не доводить до 1: Сафари снимает SVG-фильтр и рисует сырое фото. */
-    body.is-safari .project:hover .img-shadow {
-        opacity: 0.99;
-    }
 }
 
 @media (min-width: 901px) {
@@ -335,10 +336,6 @@ body:not(.is-safari) .img-hover-wrap {
     .project.is-active .img-hover-wrap,
     .project.is-active .img-shadow {
         opacity: 1;
-    }
-
-    body.is-safari .project.is-active .img-shadow {
-        opacity: 0.99;
     }
 }
 
@@ -522,7 +519,7 @@ h2.side-quests-title {
     
     .projects { gap: 80px; margin-bottom: 80px; max-width: 550px; }
     .project-image { border-radius: 3px; margin-bottom: 16px; }
-    .project-image img { border-radius: 3px; }
+    .project-image img:not(.img-shadow) { border-radius: 3px; }
     .project-text { flex-direction: column; }
     .project-left, .project-right { width: 100%; padding-right: 0; }
     .project-right { padding-top: 0; }

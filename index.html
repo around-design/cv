@@ -8,7 +8,7 @@
     <meta name="author" content="Валентин Филиппов">
     <link rel="canonical" href="https://cv.around.design/">
     <link href="images/favicon.png" rel="icon">
-    <link rel="stylesheet" href="style.css?v=61">
+    <link rel="stylesheet" href="style.css?v=64">
     <link rel="modulepreload" href="hero-3d/hero-site.js?v=4">
     <link rel="modulepreload" href="hero-3d/hero-scene.js?v=2">
     <link rel="modulepreload" href="hero-3d/hero-shape.js?v=2">
@@ -255,7 +255,7 @@
                 initSafariImageShadows();
             }
 
-            // Тень по альфе через SVG feGaussianBlur (SourceAlpha картинки).
+            // Тень по альфе: три полных слоя (маска → цвет → blur), склеить, без выреза.
             function initSafariImageShadows() {
                 const PAD = 80;
                 const LAYERS = [
@@ -263,14 +263,6 @@
                     [10, 10, 16, 0.08],
                     [24, 24, 30, 0.07]
                 ];
-                const svgNS = 'http://www.w3.org/2000/svg';
-                const xlinkNS = 'http://www.w3.org/1999/xlink';
-
-                const svgEl = (name, attrs) => {
-                    const el = document.createElementNS(svgNS, name);
-                    Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
-                    return el;
-                };
 
                 const imageReady = (img) => {
                     const decode = () => (img.decode ? img.decode().catch(() => {}) : Promise.resolve());
@@ -281,105 +273,298 @@
                     });
                 };
 
-                const paint = (holder, svg, img, rgb, uid) => {
+                const parseRgb = (value) => {
+                    const parts = String(value).split(',').map((n) => Number.parseInt(n.trim(), 10));
+                    if (parts.length < 3 || parts.some((n) => Number.isNaN(n))) return [0, 0, 0];
+                    return parts;
+                };
+
+                const blurLine = (src, dst, start, length, stride, radius) => {
+                    const diam = radius * 2 + 1;
+                    let sum = 0;
+                    for (let k = -radius; k <= radius; k++) {
+                        const t = k < 0 ? 0 : (k >= length ? length - 1 : k);
+                        sum += src[start + t * stride];
+                    }
+                    for (let t = 0; t < length; t++) {
+                        dst[start + t * stride] = sum / diam;
+                        if (t + 1 === length) break;
+                        const sub = t - radius;
+                        const add = t + radius + 1;
+                        sum += src[start + (add >= length ? length - 1 : add) * stride]
+                             - src[start + (sub < 0 ? 0 : sub) * stride];
+                    }
+                };
+
+                const blurAlpha = (buf, w, h, radius) => {
+                    const r = Math.max(1, Math.round(radius));
+                    const tmp = new Float32Array(buf.length);
+                    for (let pass = 0; pass < 3; pass++) {
+                        for (let y = 0; y < h; y++) blurLine(buf, tmp, y * w, w, 1, r);
+                        for (let x = 0; x < w; x++) blurLine(tmp, buf, x, h, w, r);
+                    }
+                };
+
+                const makeSilhouette = (img, w, h, radius) => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    ctx.beginPath();
+                    if (radius > 0 && typeof ctx.roundRect === 'function') {
+                        ctx.roundRect(0, 0, w, h, radius);
+                    } else {
+                        ctx.rect(0, 0, w, h);
+                    }
+                    ctx.clip();
+                    ctx.drawImage(img, 0, 0, w, h);
+                    return canvas;
+                };
+
+                const extractAlpha = (canvas) => {
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const alpha = new Uint8ClampedArray(width * height);
+                    for (let i = 3, j = 0; i < data.length; i += 4, j++) alpha[j] = data[i];
+                    return alpha;
+                };
+
+                const padAlpha = (alpha, w, h, pad) => {
+                    const pw = w + pad * 2;
+                    const ph = h + pad * 2;
+                    const out = new Float32Array(pw * ph);
+                    for (let y = 0; y < h; y++) {
+                        const src = y * w;
+                        const dst = (y + pad) * pw + pad;
+                        for (let x = 0; x < w; x++) out[dst + x] = alpha[src + x];
+                    }
+                    return { data: out, w: pw, h: ph };
+                };
+
+                const bakeShadow = (ctx, padded, rgb, scale, outW, outH) => {
+                    const acc = new Float32Array(outW * outH);
+                    for (const [dx, dy, blur, opacity] of LAYERS) {
+                        const blurred = new Float32Array(padded.data);
+                        blurAlpha(blurred, padded.w, padded.h, (blur * scale) / 2);
+                        const ox = Math.round(dx * scale);
+                        const oy = Math.round(dy * scale);
+                        const aScale = opacity / 255;
+                        for (let y = 0; y < padded.h; y++) {
+                            const yy = y + oy;
+                            if (yy < 0 || yy >= outH) continue;
+                            const srcRow = y * padded.w;
+                            const dstRow = yy * outW;
+                            for (let x = 0; x < padded.w; x++) {
+                                const xx = x + ox;
+                                if (xx < 0 || xx >= outW) continue;
+                                const a = blurred[srcRow + x] * aScale;
+                                if (a <= 0) continue;
+                                const i = dstRow + xx;
+                                acc[i] = a + acc[i] * (1 - a);
+                            }
+                        }
+                    }
+
+                    const image = ctx.createImageData(outW, outH);
+                    const d = image.data;
+                    const [cr, cg, cb] = rgb;
+                    for (let j = 0, i = 0; j < acc.length; j++, i += 4) {
+                        const a = acc[j] * 255 + (Math.random() + Math.random() - 1);
+                        if (a < 0.5) continue;
+                        d[i] = cr;
+                        d[i + 1] = cg;
+                        d[i + 2] = cb;
+                        d[i + 3] = a > 255 ? 255 : a;
+                    }
+                    return image;
+                };
+
+                const canvasToUrl = (canvas) => new Promise((resolve, reject) => {
+                    const finishBlob = (blob) => {
+                        if (!blob) {
+                            reject(new Error('toBlob empty'));
+                            return;
+                        }
+                        resolve(URL.createObjectURL(blob));
+                    };
+                    if (canvas.toBlob) {
+                        canvas.toBlob(finishBlob, 'image/png');
+                        return;
+                    }
+                    try {
+                        resolve(canvas.toDataURL('image/png'));
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                const paint = async (holder, img, rgb) => {
                     const cssW = Math.round(img.getBoundingClientRect().width);
                     const cssH = Math.round(img.getBoundingClientRect().height);
                     if (!img.naturalWidth || cssW < 2 || cssH < 2) return false;
 
-                    const w = cssW + PAD * 2;
-                    const h = cssH + PAD * 2;
-                    holder.style.width = w + 'px';
-                    holder.style.height = h + 'px';
+                    const scale = cssW > 1400 ? 0.5 : 1;
+                    const w = Math.max(1, Math.round(cssW * scale));
+                    const h = Math.max(1, Math.round(cssH * scale));
+                    const pad = Math.ceil(PAD * scale);
+                    const maxDx = Math.max(...LAYERS.map(([x]) => x));
+                    const maxDy = Math.max(...LAYERS.map(([, y]) => y));
+                    const radius = (parseFloat(getComputedStyle(img).borderRadius) || 0) * scale;
+
+                    holder.style.width = (cssW + PAD * 2 + maxDx) + 'px';
+                    holder.style.height = (cssH + PAD * 2 + maxDy) + 'px';
                     holder.style.left = -PAD + 'px';
                     holder.style.top = -PAD + 'px';
-                    svg.setAttribute('width', w);
-                    svg.setAttribute('height', h);
-                    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-                    svg.replaceChildren();
 
-                    const filter = svgEl('filter', {
-                        id: uid,
-                        filterUnits: 'userSpaceOnUse',
-                        x: '0',
-                        y: '0',
-                        width: String(w),
-                        height: String(h),
-                        'color-interpolation-filters': 'sRGB'
-                    });
+                    const sil = makeSilhouette(img, w, h, radius);
+                    const out = document.createElement('canvas');
+                    out.width = w + pad * 2 + Math.round(maxDx * scale);
+                    out.height = h + pad * 2 + Math.round(maxDy * scale);
+                    const ctx = out.getContext('2d');
 
-                    LAYERS.forEach(([dx, dy, blur, alpha], i) => {
-                        filter.append(
-                            svgEl('feOffset', { in: 'SourceAlpha', dx: String(dx), dy: String(dy), result: 'off' + i }),
-                            svgEl('feGaussianBlur', { in: 'off' + i, stdDeviation: String(blur / 2), result: 'blur' + i }),
-                            svgEl('feFlood', { 'flood-color': `rgb(${rgb})`, 'flood-opacity': String(alpha), result: 'flood' + i }),
-                            svgEl('feComposite', { in: 'flood' + i, in2: 'blur' + i, operator: 'in', result: 's' + i })
-                        );
-                    });
+                    let alpha;
+                    try {
+                        alpha = extractAlpha(sil);
+                    } catch (err) {
+                        alpha = null;
+                    }
 
-                    const merge = svgEl('feMerge', {});
-                    LAYERS.forEach((_, i) => merge.appendChild(svgEl('feMergeNode', { in: 's' + i })));
-                    filter.appendChild(merge);
+                    if (alpha) {
+                        const padded = padAlpha(alpha, w, h, pad);
+                        ctx.putImageData(bakeShadow(ctx, padded, rgb, scale, out.width, out.height), 0, 0);
+                    } else {
+                        const [r, g, b] = rgb;
+                        const tinted = document.createElement('canvas');
+                        tinted.width = w + pad * 2;
+                        tinted.height = h + pad * 2;
+                        const tctx = tinted.getContext('2d');
+                        tctx.drawImage(sil, pad, pad);
+                        tctx.globalCompositeOperation = 'source-in';
+                        tctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                        tctx.fillRect(0, 0, tinted.width, tinted.height);
+                        for (const [dx, dy, blur, opacity] of LAYERS) {
+                            ctx.save();
+                            ctx.globalAlpha = opacity;
+                            const spread = Math.max(1, Math.round((blur * scale) / 2));
+                            for (let ox = -spread; ox <= spread; ox += 2) {
+                                for (let oy = -spread; oy <= spread; oy += 2) {
+                                    if (ox * ox + oy * oy > spread * spread) continue;
+                                    ctx.drawImage(
+                                        tinted,
+                                        Math.round(dx * scale) + ox,
+                                        Math.round(dy * scale) + oy
+                                    );
+                                }
+                            }
+                            ctx.restore();
+                        }
+                    }
 
-                    const defs = svgEl('defs', {});
-                    defs.appendChild(filter);
-
-                    const src = img.getAttribute('src');
-                    const image = svgEl('image', {
-                        href: src,
-                        x: String(PAD),
-                        y: String(PAD),
-                        width: String(cssW),
-                        height: String(cssH),
-                        filter: `url(#${uid})`,
-                        preserveAspectRatio: 'none'
-                    });
-                    image.setAttributeNS(xlinkNS, 'href', src);
-
-                    svg.append(defs, image);
+                    const url = await canvasToUrl(out);
+                    if (holder.dataset.shadowUrl && holder.dataset.shadowUrl.startsWith('blob:')) {
+                        URL.revokeObjectURL(holder.dataset.shadowUrl);
+                    }
+                    holder.dataset.shadowUrl = url;
+                    holder.src = url;
                     return true;
                 };
 
-                const schedule = (fn) => {
-                    if ('requestIdleCallback' in window) {
-                        requestIdleCallback(fn, { timeout: 400 });
-                    } else {
-                        setTimeout(fn, 1);
+                const jobs = [];
+                let pumping = false;
+
+                const nextIdle = (preferSoon) => new Promise((resolve) => {
+                    if (preferSoon) {
+                        requestAnimationFrame(() => resolve());
+                        return;
                     }
+                    if ('requestIdleCallback' in window) {
+                        requestIdleCallback(() => resolve(), { timeout: 1000 });
+                    } else {
+                        setTimeout(resolve, 16);
+                    }
+                });
+
+                const pump = async () => {
+                    if (pumping) return;
+                    pumping = true;
+                    let first = true;
+                    while (jobs.length) {
+                        jobs.sort((a, b) => b.priority - a.priority);
+                        const job = jobs.shift();
+                        await nextIdle(first);
+                        first = false;
+                        if (job.stale()) continue;
+                        try {
+                            await job.run();
+                        } catch (err) {
+                            console.warn('Safari shadow bake failed', err);
+                        }
+                    }
+                    pumping = false;
+                    if (jobs.length) pump();
                 };
 
-                document.querySelectorAll('.img-hover-wrap').forEach((wrap, index) => {
+                document.querySelectorAll('.img-hover-wrap').forEach((wrap) => {
                     const img = wrap.querySelector('.img-hover');
                     const project = wrap.closest('.project');
                     const box = wrap.closest('.project-image');
                     if (!img || !project || !box) return;
 
-                    const uid = 'img-shadow-' + index;
-                    const holder = document.createElement('div');
+                    const holder = document.createElement('img');
                     holder.className = 'img-shadow';
+                    holder.alt = '';
                     holder.setAttribute('aria-hidden', 'true');
-                    const svg = svgEl('svg', {});
-                    holder.appendChild(svg);
                     box.insertBefore(holder, wrap);
 
-                    const rgb = (getComputedStyle(project).getPropertyValue('--shadow') || '0, 0, 0').trim();
+                    const rgb = parseRgb(getComputedStyle(project).getPropertyValue('--shadow') || '0, 0, 0');
                     let lastKey = '';
+                    let gen = 0;
+                    let priority = 0;
+
+                    const enqueue = () => {
+                        const token = gen;
+                        jobs.push({
+                            get priority() { return priority; },
+                            stale: () => token !== gen,
+                            run: async () => {
+                                if (token !== gen) return;
+                                const ok = await paint(holder, img, rgb);
+                                if (ok && token === gen) {
+                                    const rect = img.getBoundingClientRect();
+                                    lastKey = `${Math.round(rect.width)}x${Math.round(rect.height)}`;
+                                }
+                            }
+                        });
+                        pump();
+                    };
 
                     const update = () => {
                         if (!img.naturalWidth) return;
                         const rect = img.getBoundingClientRect();
                         const key = `${Math.round(rect.width)}x${Math.round(rect.height)}`;
                         if (key === lastKey) return;
-                        if (paint(holder, svg, img, rgb, uid)) lastKey = key;
+                        gen += 1;
+                        enqueue();
                     };
 
-                    imageReady(img).then(() => schedule(update));
+                    imageReady(img).then(update);
 
                     let resizeTimer;
                     const ro = new ResizeObserver(() => {
                         clearTimeout(resizeTimer);
-                        resizeTimer = setTimeout(update, 150);
+                        resizeTimer = setTimeout(update, 200);
                     });
                     ro.observe(img);
+
+                    const io = new IntersectionObserver((entries) => {
+                        entries.forEach((entry) => {
+                            if (entry.isIntersecting) {
+                                priority = 1;
+                                pump();
+                            }
+                        });
+                    }, { rootMargin: '80% 0px' });
+                    io.observe(box);
                 });
             }
 
