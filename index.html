@@ -8,11 +8,7 @@
     <meta name="author" content="Валентин Филиппов">
     <link rel="canonical" href="https://cv.around.design/">
     <link href="images/favicon.png" rel="icon">
-    <link rel="stylesheet" href="style.css?v=64">
-    <link rel="modulepreload" href="hero-3d/hero-site.js?v=4">
-    <link rel="modulepreload" href="hero-3d/hero-scene.js?v=2">
-    <link rel="modulepreload" href="hero-3d/hero-shape.js?v=2">
-    <link rel="modulepreload" href="hero-3d/geometry.js">
+    <link rel="stylesheet" href="style.css?v=65">
 
     <!-- Open Graph -->
     <meta property="og:type" content="profile">
@@ -68,7 +64,7 @@
             <div class="divider container-wide fade-in delay-2">
                 <img src="images/chart-desktop.svg" alt="" class="svg-desktop">
                 <img src="images/chart-mobile.svg" alt="" class="svg-mobile">
-                <div class="hero-3d" id="hero-3d" aria-hidden="true"></div>
+                <div class="hero-3d" id="hero-3d" hidden aria-hidden="true"></div>
             </div>
         </header>
 
@@ -117,7 +113,7 @@
                         <h2><a href="https://around.design/projects/ruchess/" class="pseudo-link" data-i18n="ruchess_title" data-i18n-href="ruchess_link">Ruchess, шахматная образовательная платформа</a></h2>
                     </div>
                     <div class="project-right" data-i18n="ruchess_desc">
-                        <p>Руководил проектированием и тестированием концепта сервиса, объединяющего все инструменты обучения в одном месте.</p>
+                        <p>Руководил проектированием и&nbsp;тестированием концепта сервиса, объединяющего все инструменты обучения в&nbsp;одном месте.</p>
                     </div>
                 </div>
             </div>
@@ -168,7 +164,7 @@
                         <h2><a href="https://around.design/projects/tad/" class="pseudo-link" data-i18n="tad_title" data-i18n-href="tad_link">Telecom Attack Discovery, система анализа трафика в&nbsp;сигнальных сетях</a></h2>
                     </div>
                     <div class="project-right" data-i18n="tad_desc">
-                        <p>Сделал и протестировал новую версию веб-интерфейса системы, упрощающую специалистам обнаружение и анализ атак.</p>
+                        <p>Спроектировал и протестировал новую версию веб-интерфейса системы, упрощающую специалистам обнаружение и&nbsp;анализ атак.</p>
                     </div>
                 </div>
             </div>
@@ -763,7 +759,13 @@
         });
     </script>
 
-    <!-- Трёхмерный герой: заменяет chart-desktop.svg, настраивается в hero-3d/index.html -->
-    <script type="module" src="hero-3d/hero-site.js?v=4"></script>
+    <!-- Трёхмерный герой: только от 701px. Цепочка site → scene → shape → geometry
+         подтянется сама; на телефоне эти файлы не нужны. -->
+    <script type="module">
+        const wide = window.matchMedia("(min-width: 701px)");
+        const loadHero = () => import("./hero-3d/hero-site.js?v=5");
+        if (wide.matches) loadHero();
+        else wide.addEventListener("change", (e) => { if (e.matches) loadHero(); }, { once: true });
+    </script>
 </body>
 </html>

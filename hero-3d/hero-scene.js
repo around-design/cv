@@ -35,6 +35,8 @@ export function mountHero({ mount, orbit = false, overlaySrc = null, padX = 1.12
         svg = svgEl("svg", {
             class: "hero-scene",
             xmlns: NS,
+            width: "100%",
+            height: "100%",
             preserveAspectRatio: "xMidYMid meet",
         });
     }

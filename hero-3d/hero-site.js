@@ -1,7 +1,7 @@
 // Puts the hero scene into the divider of the page, in place of the flat drawing.
 // Desktop and tablet only: below 700px the layout uses the narrow mobile picture,
 // which this scene does not match yet.
-import { mountHero, params } from "./hero-scene.js?v=2";
+import { mountHero, params } from "./hero-scene.js?v=3";
 
 const box = document.getElementById("hero-3d");
 const divider = box && box.closest(".divider");
@@ -22,6 +22,7 @@ function start() {
         hero = mountHero({ mount: box, padX: PAD_X, padY: PAD_Y });
         // Swap only after the first frame is already in the DOM, so the flat
         // drawing is not replaced by an empty box.
+        box.hidden = false;
         divider.classList.add("hero-3d-on");
     } catch (err) {
         hero = null;
@@ -33,6 +34,7 @@ function stop() {
     hero.dispose();
     hero = null;
     anchor = null;
+    box.hidden = true;
     divider.classList.remove("hero-3d-on");
 }
 

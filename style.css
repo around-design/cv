@@ -20,6 +20,11 @@
     -moz-osx-font-smoothing: grayscale;
 }
 
+html {
+    overflow-x: hidden;
+    overflow-x: clip;
+}
+
 body {
     font-family: "Formular Neutral", system-ui, -apple-system, sans-serif;
     background-color: var(--bg-color);
@@ -27,6 +32,7 @@ body {
     line-height: 1.45;
     font-size: 18px; 
     overflow-x: hidden;
+    overflow-x: clip;
 }
 
 @media (min-width: 1400px) { body { font-size: 19px; } }
@@ -90,6 +96,7 @@ h2 a {
     flex-wrap: wrap;
     align-items: flex-start;
     width: 100%;
+    min-width: 0;
     margin-bottom: 0;
 }
 
@@ -133,6 +140,7 @@ h1 {
     margin-top: 60px;
     margin-bottom: 100px;
     width: 100%;
+    min-width: 0;
 }
 
 .svg-desktop { display: block; width: 100%; max-width: 100%; height: auto; }
@@ -144,8 +152,11 @@ h1 {
     position: relative;
     align-self: flex-start;
     width: 100%;
+    min-width: 0;
     aspect-ratio: 1577 / 589;
     overflow: visible;
+    /* Дети могут рисоваться снаружи при наклоне, но не должны раздувать ширину страницы. */
+    contain: inline-size;
 }
 
 .divider.hero-3d-on .hero-3d { display: block; }
@@ -505,15 +516,6 @@ h2.side-quests-title {
         left: 50%;
         transform: translateX(-50%);
     }
-
-    /* Трёхмерный герой выходит за поля так же, как плоская картинка. */
-    .hero-3d {
-        width: 118%;
-        max-width: none;
-        flex-shrink: 0;
-        left: 50%;
-        transform: translateX(-50%);
-    }
     
     .process { display: none; }
     
@@ -571,13 +573,38 @@ h2.side-quests-title {
 @media (min-width: 701px) and (max-width: 900px) {
     .divider { margin-bottom: 80px; }
     .col-hero { margin-bottom: 100px; }
+
+    /* Трёхмерный герой выходит за поля так же, как плоская картинка. */
+    .hero-3d {
+        width: 118%;
+        max-width: none;
+        flex-shrink: 0;
+        left: 50%;
+        transform: translateX(-50%);
+    }
 }
 
 @media (max-width: 700px) {
-    .page-wrapper { padding: 16px; }
+    .page-wrapper { padding: 16px; overflow-x: clip; }
     .svg-desktop { display: none; }
-    /* В мобиле рисунок другой, сжатый по ширине — сцену не показываем. */
-    .divider.hero-3d-on .hero-3d { display: none; }
+    /* В мобиле рисунок другой — сцену не монтируем и вынимаем из потока,
+       иначе Safari считает её min-content по aspect-ratio ~1577px и
+       не даёт странице сжаться до ширины экрана. */
+    .hero-3d,
+    .divider.hero-3d-on .hero-3d {
+        display: none;
+        width: 0;
+        height: 0;
+        max-width: 0;
+        overflow: hidden;
+        position: absolute;
+        left: auto;
+        transform: none;
+        flex-shrink: 1;
+        aspect-ratio: auto;
+        contain: none;
+        pointer-events: none;
+    }
     .svg-mobile { 
         display: block; 
         width: 120%; 
