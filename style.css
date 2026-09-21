@@ -651,6 +651,8 @@ h2.side-quests-title {
         left: auto;
         transform: none;
         position: static;
+        pointer-events: auto;
+        touch-action: pan-y;
     }
     .hero-3d svg.hero-scene-desktop { display: none; }
     .hero-3d svg.hero-scene-mobile { display: block; }

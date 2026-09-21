@@ -1,7 +1,7 @@
 // Puts the hero scene into the divider of the page, in place of the flat drawing.
-// The cursor turns the scene the same way on every width; on a phone the handset
-// can turn it too.
-import { mountHero, params } from "./hero-scene.js?v=10";
+// On a wide screen the cursor turns the scene. On a phone the page scroll tips
+// it, and a horizontal finger on the drawing yaws it the same way as hover.
+import { mountHero, params } from "./hero-scene.js?v=11";
 
 const box = document.getElementById("hero-3d");
 const divider = box && box.closest(".divider");
@@ -13,11 +13,6 @@ const calm = window.matchMedia("(prefers-reduced-motion: reduce)");
 // below matches that bleed, which keeps the drawing itself the same size as before.
 const PAD_X = 1.08;
 const PAD_Y = 1.16;
-
-// Degrees of phone tilt that map onto the scene's full follow range. A rest pose
-// is taken from the first reading, so holding the phone as you opened the page
-// looks straight ahead.
-const GYRO_SPAN = 24;
 
 let hero = null;
 
@@ -38,11 +33,13 @@ function start() {
 }
 
 function stop() {
-    unbindGyro();
+    unbindMobile();
     if (!hero) return;
     hero.dispose();
     hero = null;
     anchor = null;
+    yaw = 0;
+    pitch = 0;
     box.hidden = true;
     divider.classList.remove("hero-3d-on");
 }
@@ -53,6 +50,9 @@ function syncLayout() {
         return;
     }
     anchor = null;
+    drag = null;
+    yaw = 0;
+    pitch = 0;
     hero.setVariant(variant());
     hero.front();
     bindInput();
@@ -64,8 +64,20 @@ function syncLayout() {
 // A share of the drawing's width or height crossed turns the scene by that share of
 // its range, so crossing the whole drawing does not quite reach the limit.
 const GAIN = 0.45;
+// Scroll maps onto the same range as a typical hover, not the full follow stop.
+const SCROLL_GAIN = 0.65;
+const LOCK = 10;
 // Where the cursor would have to be for the scene to look straight ahead.
 let anchor = null;
+let yaw = 0;
+let pitch = 0;
+let returning = false;
+let drag = null;
+let mobileOn = false;
+
+function clamp(v, a, b) {
+    return Math.min(b, Math.max(a, v));
+}
 
 // Keep the anchor within reach of the limits, so a tilt pinned at its end still
 // answers the first backward move instead of waiting out the overshoot.
@@ -74,186 +86,198 @@ function leash(p, a) {
     return Math.min(p + span, Math.max(p - span, a));
 }
 
-function onMove(e) {
+function boxRect() {
+    return box.getBoundingClientRect();
+}
+
+function overBox(e, r) {
+    return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+}
+
+function pxOf(e, r) {
+    return ((e.clientX - r.left) / r.width) * 2 - 1;
+}
+
+function pyOf(e, r) {
+    return ((e.clientY - r.top) / r.height) * 2 - 1;
+}
+
+function apply(home) {
     if (!hero) return;
-    // A tap on a phone would pin this hover-anchor, and onGyro then refuses
-    // to turn the scene. Mouse still drives the narrow layout on a computer.
-    if (!wide.matches && e.pointerType !== "mouse") return;
-    const r = box.getBoundingClientRect();
-    // Hit-test the box ourselves: the drawing inside has pointer-events: none so
-    // it never steals clicks from the header, and Safari would otherwise let the
-    // cursor fall through the empty container without a pointermove on the box.
-    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) {
+    if (home === true) returning = true;
+    else if (home === false) returning = false;
+    hero.setPointer(yaw, pitch, returning);
+}
+
+function updatePitch() {
+    if (wide.matches) {
+        pitch = 0;
+        return;
+    }
+    const span = Math.max(box.offsetHeight, 1);
+    const y = window.scrollY || document.documentElement.scrollTop || 0;
+    // Negative: the top edge recedes, the bottom comes forward, as you scroll.
+    pitch = -clamp(y / span, 0, 1) * SCROLL_GAIN;
+}
+
+function onScroll() {
+    if (!hero || wide.matches || !params.followOn) return;
+    updatePitch();
+    apply();
+}
+
+function driveHover(e) {
+    const r = boxRect();
+    if (!overBox(e, r)) {
         if (anchor) onLeave();
         return;
     }
-    const px = ((e.clientX - r.left) / r.width) * 2 - 1;
-    const py = ((e.clientY - r.top) / r.height) * 2 - 1;
+    const px = pxOf(e, r);
+    const py = pyOf(e, r);
     if (!anchor) {
-        // Pick the tilt up where it stands: entering leaves the scene as it was.
         const t = hero.tilt();
         anchor = { x: px - t.x / GAIN, y: py - t.y / GAIN };
     }
     anchor.x = leash(px, anchor.x);
     anchor.y = leash(py, anchor.y);
-    hero.setPointer((px - anchor.x) * GAIN, (py - anchor.y) * GAIN);
+    yaw = (px - anchor.x) * GAIN;
+    pitch = (py - anchor.y) * GAIN;
+    apply(false);
+}
+
+function driveMouseYaw(e) {
+    const r = boxRect();
+    if (!overBox(e, r)) {
+        if (anchor) {
+            anchor = null;
+            yaw = 0;
+            apply(true);
+        }
+        return;
+    }
+    const px = pxOf(e, r);
+    if (!anchor) {
+        const t = hero.tilt();
+        anchor = { x: px - t.x / GAIN };
+    }
+    anchor.x = leash(px, anchor.x);
+    yaw = (px - anchor.x) * GAIN;
+    apply(false);
+}
+
+function onMove(e) {
+    if (!hero || !params.followOn) return;
+    if (wide.matches) {
+        driveHover(e);
+        return;
+    }
+    if (e.pointerType === "touch" || e.pointerType === "pen") {
+        onDragMove(e);
+        return;
+    }
+    driveMouseYaw(e);
 }
 
 function onLeave() {
     anchor = null;
-    if (hero && !gyroOrigin) hero.release();
+    yaw = 0;
+    if (wide.matches) pitch = 0;
+    else updatePitch();
+    apply(true);
 }
 
-let gyroOn = false;
-let gyroOrigin = null;
-let gyroArmed = false;
-let gyroPermitted = false;
-let gyroAsking = false;
-
-function screenAngle() {
-    const o = screen.orientation;
-    if (o && typeof o.angle === "number") return o.angle;
-    return typeof window.orientation === "number" ? window.orientation : 0;
-}
-
-// beta is front-back, gamma left-right. Rotate that pair into screen space so a
-// landscape hold still maps right-tilt to a yaw.
-function projectTilt(beta, gamma) {
-    const a = ((screenAngle() % 360) + 360) % 360;
-    if (a === 90) return { x: beta, y: -gamma };
-    if (a === 180) return { x: -gamma, y: -beta };
-    if (a === 270) return { x: -beta, y: gamma };
-    return { x: gamma, y: beta };
-}
-
-function onGyro(e) {
+function onDown(e) {
     if (!hero || wide.matches || !params.followOn) return;
-    if (e.beta == null || e.gamma == null) return;
-    // A mouse over the narrow layout is driving the scene (desktop testing);
-    // don't let a leftover orientation reading yank it back.
-    if (anchor) return;
-    const mapped = projectTilt(e.beta, e.gamma);
-    if (!gyroOrigin) gyroOrigin = { x: mapped.x, y: mapped.y, type: e.type };
-    else if (gyroOrigin.type !== e.type) return;
-    hero.setPointer(
-        (mapped.x - gyroOrigin.x) / GYRO_SPAN,
-        -(mapped.y - gyroOrigin.y) / GYRO_SPAN
-    );
+    if (e.pointerType !== "touch" && e.pointerType !== "pen") return;
+    const r = boxRect();
+    if (!overBox(e, r)) return;
+    drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, axis: null, anchorX: null };
 }
 
-function dropGestureHooks() {
-    document.removeEventListener("click", onFirstGesture, true);
-    gyroArmed = false;
-}
-
-function listenGyro() {
-    if (gyroOn || wide.matches || !hero) return;
-    window.addEventListener("deviceorientation", onGyro, { passive: true });
-    window.addEventListener("deviceorientationabsolute", onGyro, { passive: true });
-    gyroOn = true;
-}
-
-function unbindGyro() {
-    window.removeEventListener("deviceorientation", onGyro);
-    window.removeEventListener("deviceorientationabsolute", onGyro);
-    dropGestureHooks();
-    gyroOn = false;
-    gyroOrigin = null;
-    if (hero) hero.release();
-}
-
-function onFirstGesture() {
-    if (wide.matches || gyroAsking) return;
-    // Subscribe in the same turn as the tap: iOS is picky about both the
-    // permission call and the listener happening inside the user gesture.
-    listenGyro();
-    const oriReq =
-        typeof DeviceOrientationEvent !== "undefined" && DeviceOrientationEvent.requestPermission;
-    const motReq = typeof DeviceMotionEvent !== "undefined" && DeviceMotionEvent.requestPermission;
-    if (typeof oriReq === "function" && !gyroPermitted) {
-        gyroAsking = true;
-        if (typeof motReq === "function") {
-            try {
-                motReq.call(DeviceMotionEvent);
-            } catch {
-                /* motion permission is optional */
-            }
+function onDragMove(e) {
+    if (!drag || drag.id !== e.pointerId) return;
+    const dx = e.clientX - drag.x0;
+    const dy = e.clientY - drag.y0;
+    if (!drag.axis) {
+        if (dx * dx + dy * dy < LOCK * LOCK) return;
+        drag.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+        if (drag.axis === "x") {
+            const r = boxRect();
+            const px = pxOf(e, r);
+            const t = hero.tilt();
+            drag.anchorX = px - t.x / GAIN;
         }
-        try {
-            Promise.resolve(oriReq.call(DeviceOrientationEvent))
-                .then((state) => {
-                    gyroAsking = false;
-                    if (state !== "granted") {
-                        window.removeEventListener("deviceorientation", onGyro);
-                        window.removeEventListener("deviceorientationabsolute", onGyro);
-                        gyroOn = false;
-                        return;
-                    }
-                    gyroPermitted = true;
-                    dropGestureHooks();
-                })
-                .catch(() => {
-                    gyroAsking = false;
-                    window.removeEventListener("deviceorientation", onGyro);
-                    window.removeEventListener("deviceorientationabsolute", onGyro);
-                    gyroOn = false;
-                });
-        } catch {
-            gyroAsking = false;
-            window.removeEventListener("deviceorientation", onGyro);
-            window.removeEventListener("deviceorientationabsolute", onGyro);
-            gyroOn = false;
-        }
-        return;
     }
-    dropGestureHooks();
+    if (drag.axis !== "x") return;
+    const r = boxRect();
+    const px = pxOf(e, r);
+    drag.anchorX = leash(px, drag.anchorX);
+    yaw = (px - drag.anchorX) * GAIN;
+    apply(false);
 }
 
-function armGyro() {
-    if (wide.matches) return;
-    const needsGesture =
-        typeof DeviceOrientationEvent !== "undefined" &&
-        typeof DeviceOrientationEvent.requestPermission === "function" &&
-        !gyroPermitted;
-    if (needsGesture) {
-        if (!gyroArmed) {
-            document.addEventListener("click", onFirstGesture, true);
-            gyroArmed = true;
-        }
-        return;
+function onUp(e) {
+    if (!drag || drag.id !== e.pointerId) return;
+    const yawing = drag.axis === "x";
+    drag = null;
+    if (yawing) {
+        yaw = 0;
+        updatePitch();
+        apply(true);
     }
-    listenGyro();
+}
+
+function onTouchMove(e) {
+    if (!drag || drag.axis !== "x") return;
+    e.preventDefault();
+}
+
+function unbindMobile() {
+    if (!mobileOn) return;
+    window.removeEventListener("scroll", onScroll);
+    window.removeEventListener("pointerdown", onDown);
+    window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onUp);
+    box.removeEventListener("touchmove", onTouchMove, { capture: true });
+    mobileOn = false;
+    drag = null;
+}
+
+function bindMobile() {
+    if (mobileOn) return;
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("pointerdown", onDown, { passive: true });
+    window.addEventListener("pointerup", onUp, { passive: true });
+    window.addEventListener("pointercancel", onUp, { passive: true });
+    box.addEventListener("touchmove", onTouchMove, { passive: false, capture: true });
+    mobileOn = true;
+    updatePitch();
+    apply();
 }
 
 function bindInput() {
-    if (wide.matches) unbindGyro();
-    else armGyro();
-}
-
-function onOrient() {
-    gyroOrigin = null;
-}
-
-function syncFollowFlag() {
-    // Hover/tilt only moves when the person does; keep phone tilt even if
-    // Reduce Motion is on, otherwise the mobile scene is a still.
-    params.followOn = !calm.matches || !wide.matches;
+    if (wide.matches) {
+        unbindMobile();
+        yaw = 0;
+        pitch = 0;
+        if (hero) hero.setPointer(0, 0, true);
+        return;
+    }
+    bindMobile();
 }
 
 if (box && divider) {
-    syncFollowFlag();
+    params.followOn = !calm.matches;
     wide.addEventListener("change", syncLayout);
     calm.addEventListener("change", () => {
-        syncFollowFlag();
-        if (hero && calm.matches && wide.matches) hero.front();
+        params.followOn = !calm.matches;
+        if (hero && calm.matches) hero.front();
+        yaw = 0;
+        pitch = 0;
+        anchor = null;
         bindInput();
     });
     window.addEventListener("pointermove", onMove, { passive: true });
     window.addEventListener("blur", onLeave);
-    window.addEventListener("orientationchange", onOrient);
-    document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible") gyroOrigin = null;
-        else if (hero && gyroOn) hero.release();
-    });
     start();
 }

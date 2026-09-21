@@ -270,16 +270,16 @@ export function mountHero({
     const pointer = { x: 0, y: 0 };
     // Coming home after the cursor left is a slower move than following it.
     let homing = false;
-    function setPointer(x, y) {
+    function setPointer(x, y, home) {
         pointer.x = Math.max(-1, Math.min(1, x));
         pointer.y = Math.max(-1, Math.min(1, y));
-        homing = false;
+        if (home !== undefined) homing = !!home;
+        else homing = false;
     }
 
     // The scene lets go of the cursor and drifts back to the front view.
     function release() {
-        setPointer(0, 0);
-        homing = true;
+        setPointer(0, 0, true);
     }
 
     // Current view in the same -1..1 units setPointer takes, so whoever drives the
