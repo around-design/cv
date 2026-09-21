@@ -1,7 +1,7 @@
 // Draws the hero shape as an SVG: the scene is line art with a handful of flat
 // faces, so projecting it by hand every frame is cheaper than an engine, and the
 // page gets the drawing in a couple of kilobytes instead of a megabyte.
-import { params, buildShape, W, H } from "./hero-shape.js?v=2";
+import { params, buildShape, W, H, setVariant as applyVariant, lineWidth } from "./hero-shape.js?v=7";
 
 export { params };
 
@@ -19,17 +19,148 @@ function svgEl(name, attrs) {
 // only make the path string longer.
 const round = (v) => Math.round(v * 10) / 10;
 
+// Orthographic: turn the point, then keep two of its three numbers. Screen y is
+// negated because SVG counts downwards; the third row is the depth, which only
+// the faces need, to know which of them is in front.
+function scenePaths(shape, ax, ay) {
+    const ca = Math.cos(ax);
+    const sa = Math.sin(ax);
+    const cb = Math.cos(ay);
+    const sb = Math.sin(ay);
+    const xx = cb;
+    const xz = sb;
+    const yx = -sa * sb;
+    const yy = -ca;
+    const yz = sa * cb;
+    const zx = -ca * sb;
+    const zy = sa;
+    const zz = ca * cb;
+
+    const { start, cubics, n } = shape.line;
+    const xy = (x, y, z) =>
+        round(xx * x + xz * z) + " " + round(yx * x + yy * y + yz * z);
+    const line = ["M" + xy(start[0], start[1], start[2])];
+    for (let i = 0, k = 0; k < n; k++, i += 9) {
+        line.push(
+            "C" +
+                xy(cubics[i], cubics[i + 1], cubics[i + 2]) +
+                " " +
+                xy(cubics[i + 3], cubics[i + 4], cubics[i + 5]) +
+                " " +
+                xy(cubics[i + 6], cubics[i + 7], cubics[i + 8])
+        );
+    }
+
+    const tris = shape.star.tris;
+    const blades = [];
+    for (let i = 0; i < tris.length; i += 9) {
+        const p = new Array(3);
+        for (let v = 0; v < 3; v++) {
+            const x = tris[i + v * 3];
+            const y = tris[i + v * 3 + 1];
+            const z = tris[i + v * 3 + 2];
+            p[v] = [xx * x + xz * z, yx * x + yy * y + yz * z];
+        }
+        // One path, one fill: a back face wound the other way would punch a hole
+        // in the spike in front of it. Skip those, and the rest is the silhouette.
+        const area =
+            (p[1][0] - p[0][0]) * (p[2][1] - p[0][1]) - (p[1][1] - p[0][1]) * (p[2][0] - p[0][0]);
+        if (area <= 0) continue;
+        blades.push(
+            "M" +
+                round(p[0][0]) +
+                " " +
+                round(p[0][1]) +
+                "L" +
+                round(p[1][0]) +
+                " " +
+                round(p[1][1]) +
+                "L" +
+                round(p[2][0]) +
+                " " +
+                round(p[2][1]) +
+                "Z"
+        );
+    }
+
+    const core = shape.star.core;
+    const faces = shape.faces
+        .map((face) => {
+            let depth = 0;
+            let out = "";
+            for (let v = 0; v < 3; v++) {
+                const [x, y, z] = face[v];
+                depth += zx * x + zy * y + zz * z;
+                out +=
+                    (v ? "L" : "M") +
+                    round(xx * x + xz * z) +
+                    " " +
+                    round(yx * x + yy * y + yz * z);
+            }
+            return { depth, d: out + "Z" };
+        })
+        .sort((a, b) => a.depth - b.depth);
+
+    return {
+        line: line.join(""),
+        star: blades.join(""),
+        core: {
+            cx: round(xx * core[0] + xz * core[2]),
+            cy: round(yx * core[0] + yy * core[1] + yz * core[2]),
+            r: round(shape.star.coreR),
+        },
+        faces,
+    };
+}
+
+function strokeAttrs(width) {
+    return `stroke="${INK}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"`;
+}
+
+// The rest pose, as a standalone SVG: the page can paint this with the HTML, so
+// the drawing does not wait for the module. Same viewBox aspect as the old flat
+// picture, so the live scene can take its place without a jump.
+export function renderFrontSVG(variantName = "desktop", padX = 1, padY = 1) {
+    const prevW = W;
+    applyVariant(variantName);
+    const shape = buildShape();
+    const drawn = scenePaths(shape, 0, 0);
+    const sw = lineWidth();
+    const vw = W * padX;
+    const vh = H * padY;
+    const cls = variantName === "mobile" ? "hero-scene hero-scene-mobile" : "hero-scene hero-scene-desktop";
+    const faces = drawn.faces
+        .map((face) => `  <path class="hero-face" fill="${PAPER}" ${strokeAttrs(sw)} d="${face.d}"/>`)
+        .join("\n");
+    const svg = `<svg class="${cls}" xmlns="http://www.w3.org/2000/svg" viewBox="${-vw / 2} ${-vh / 2} ${vw} ${vh}" fill="none" aria-hidden="true" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+  <path class="hero-line" fill="none" ${strokeAttrs(sw)} d="${drawn.line}"/>
+  <path class="hero-star" fill="${INK}" fill-rule="nonzero" d="${drawn.star}"/>
+  <circle class="hero-core" fill="${INK}" cx="${drawn.core.cx}" cy="${drawn.core.cy}" r="${drawn.core.r}"/>
+${faces}
+</svg>
+`;
+    if (prevW !== W) applyVariant(prevW > 800 ? "desktop" : "mobile");
+    return svg;
+}
+
 // One page, one scene: the shape is shared module state, the bits below belong to
 // the element it is drawn into.
-export function mountHero({ mount, orbit = false, overlaySrc = null, padX = 1.12, padY = 1.12 } = {}) {
+export function mountHero({
+    mount,
+    orbit = false,
+    overlaySrc = null,
+    padX = 1.12,
+    padY = 1.12,
+    variant = "desktop",
+} = {}) {
+    applyVariant(variant);
     let shape = buildShape();
 
-    // The viewBox holds the drawing plus the room a tilt needs, and the browser
-    // fits it to however big the element happens to be — so there is no resizing
-    // to do, and the stroke keeps its width relative to the drawing.
-    // The page can ship the front view already drawn, so the first paint does not
-    // wait for this module. If the element is empty, the same markup is built here.
-    let svg = mount.querySelector("svg.hero-scene");
+    // The page ships both rest poses in the HTML; pick the one for this width and
+    // leave it as it is until the scene actually turns, so Safari does not repaint
+    // the drawing the moment the script wakes up.
+    const want = variant === "mobile" ? "hero-scene-mobile" : "hero-scene-desktop";
+    let svg = mount.querySelector("svg." + want) || mount.querySelector("svg.hero-scene");
     const owned = !svg;
     if (!svg) {
         svg = svgEl("svg", {
@@ -40,11 +171,16 @@ export function mountHero({ mount, orbit = false, overlaySrc = null, padX = 1.12
             preserveAspectRatio: "xMidYMid meet",
         });
     }
+    for (const node of [...mount.querySelectorAll("svg.hero-scene")]) {
+        if (node !== svg) node.remove();
+    }
+    svg.setAttribute("class", "hero-scene");
     let zoom = 1;
     function frame() {
         const w = (W * padX) / zoom;
         const h = (H * padY) / zoom;
-        svg.setAttribute("viewBox", `${-w / 2} ${-h / 2} ${w} ${h}`);
+        const vb = `${-w / 2} ${-h / 2} ${w} ${h}`;
+        if (svg.getAttribute("viewBox") !== vb) svg.setAttribute("viewBox", vb);
     }
     frame();
 
@@ -53,7 +189,7 @@ export function mountHero({ mount, orbit = false, overlaySrc = null, padX = 1.12
     const stroke = {
         fill: "none",
         stroke: INK,
-        "stroke-width": params.width,
+        "stroke-width": lineWidth(),
         "stroke-linecap": "round",
         "stroke-linejoin": "round",
     };
@@ -72,10 +208,33 @@ export function mountHero({ mount, orbit = false, overlaySrc = null, padX = 1.12
     }
 
     // Panel only: the source drawing laid over the front view, to check the match.
+    let overlayHref = overlaySrc;
     const overlay = overlaySrc
-        ? svgEl("image", { href: overlaySrc, x: -W / 2, y: -H / 2, width: W, height: H })
+        ? svgEl("image", { href: overlayHref, x: -W / 2, y: -H / 2, width: W, height: H })
         : null;
     if (overlay) svg.append(overlay);
+
+    function placeOverlay() {
+        if (!overlay) return;
+        overlay.setAttribute("href", overlayHref);
+        overlay.setAttribute("x", String(-W / 2));
+        overlay.setAttribute("y", String(-H / 2));
+        overlay.setAttribute("width", String(W));
+        overlay.setAttribute("height", String(H));
+    }
+
+    function setVariant(name) {
+        const changed = applyVariant(name);
+        if (overlay && /source(-mobile)?\.svg$/.test(overlayHref || "")) {
+            overlayHref = name === "mobile" ? "source-mobile.svg" : "source.svg";
+        }
+        placeOverlay();
+        if (changed) {
+            frame();
+            rebuild();
+            paint();
+        }
+    }
 
     // How far the scene is turned: the tilt that follows the cursor, plus whatever
     // the panel has dragged it by.
@@ -84,100 +243,18 @@ export function mountHero({ mount, orbit = false, overlaySrc = null, padX = 1.12
     let dirty = true;
 
     function paint() {
-        const ax = rot.x + spin.x;
-        const ay = rot.y + spin.y;
-        const ca = Math.cos(ax);
-        const sa = Math.sin(ax);
-        const cb = Math.cos(ay);
-        const sb = Math.sin(ay);
-        // Orthographic: turn the point, then keep two of its three numbers. Screen
-        // y is negated because SVG counts downwards; the third row is the depth,
-        // which only the faces need, to know which of them is in front.
-        const xx = cb;
-        const xz = sb;
-        const yx = -sa * sb;
-        const yy = -ca;
-        const yz = sa * cb;
-        const zx = -ca * sb;
-        const zy = sa;
-        const zz = ca * cb;
-
-        const { start, cubics, n } = shape.line;
-        const xy = (x, y, z) =>
-            round(xx * x + xz * z) + " " + round(yx * x + yy * y + yz * z);
-        const d = ["M" + xy(start[0], start[1], start[2])];
-        for (let i = 0, k = 0; k < n; k++, i += 9) {
-            d.push(
-                "C" +
-                    xy(cubics[i], cubics[i + 1], cubics[i + 2]) +
-                    " " +
-                    xy(cubics[i + 3], cubics[i + 4], cubics[i + 5]) +
-                    " " +
-                    xy(cubics[i + 6], cubics[i + 7], cubics[i + 8])
-            );
-        }
-        linePath.setAttribute("d", d.join(""));
-
-        const tris = shape.star.tris;
-        const blades = [];
-        for (let i = 0; i < tris.length; i += 9) {
-            const p = new Array(3);
-            for (let v = 0; v < 3; v++) {
-                const x = tris[i + v * 3];
-                const y = tris[i + v * 3 + 1];
-                const z = tris[i + v * 3 + 2];
-                p[v] = [xx * x + xz * z, yx * x + yy * y + yz * z];
-            }
-            // One path, one fill: a back face wound the other way would punch a hole
-            // in the spike in front of it. Skip those, and the rest is the silhouette.
-            const area =
-                (p[1][0] - p[0][0]) * (p[2][1] - p[0][1]) - (p[1][1] - p[0][1]) * (p[2][0] - p[0][0]);
-            if (area <= 0) continue;
-            blades.push(
-                "M" +
-                    round(p[0][0]) +
-                    " " +
-                    round(p[0][1]) +
-                    "L" +
-                    round(p[1][0]) +
-                    " " +
-                    round(p[1][1]) +
-                    "L" +
-                    round(p[2][0]) +
-                    " " +
-                    round(p[2][1]) +
-                    "Z"
-            );
-        }
-        starPath.setAttribute("d", blades.join(""));
-        const core = shape.star.core;
-        starCore.setAttribute("cx", round(xx * core[0] + xz * core[2]));
-        starCore.setAttribute("cy", round(yx * core[0] + yy * core[1] + yz * core[2]));
-
-        // Four faces, drawn from the furthest to the nearest, so the dart folds
-        // the right way round however the scene is turned.
-        const drawn = shape.faces.map((face) => {
-            let depth = 0;
-            let out = "";
-            for (let v = 0; v < 3; v++) {
-                const [x, y, z] = face[v];
-                depth += zx * x + zy * y + zz * z;
-                out +=
-                    (v ? "L" : "M") +
-                    round(xx * x + xz * z) +
-                    " " +
-                    round(yx * x + yy * y + yz * z);
-            }
-            return { depth, d: out + "Z" };
-        });
-        drawn.sort((a, b) => a.depth - b.depth);
-        drawn.forEach((face, i) => facePaths[i].setAttribute("d", face.d));
+        const drawn = scenePaths(shape, rot.x + spin.x, rot.y + spin.y);
+        linePath.setAttribute("d", drawn.line);
+        starPath.setAttribute("d", drawn.star);
+        starCore.setAttribute("cx", drawn.core.cx);
+        starCore.setAttribute("cy", drawn.core.cy);
+        drawn.faces.forEach((face, i) => facePaths[i].setAttribute("d", face.d));
     }
 
     function rebuild() {
         shape = buildShape();
-        linePath.setAttribute("stroke-width", params.width);
-        for (const face of facePaths) face.setAttribute("stroke-width", params.width);
+        linePath.setAttribute("stroke-width", lineWidth());
+        for (const face of facePaths) face.setAttribute("stroke-width", lineWidth());
         starCore.setAttribute("r", shape.star.coreR);
         updateOverlay();
         dirty = true;
@@ -263,7 +340,8 @@ export function mountHero({ mount, orbit = false, overlaySrc = null, padX = 1.12
         dirty = false;
         paint();
     }
-    paint();
+    if (!linePath.getAttribute("d")) paint();
+    else dirty = false;
     tick();
 
     function front() {
@@ -303,6 +381,7 @@ export function mountHero({ mount, orbit = false, overlaySrc = null, padX = 1.12
         rebuild,
         updateOverlay,
         setPointer,
+        setVariant,
         release,
         tilt,
         front,

@@ -1,7 +1,7 @@
 // Puts the hero scene into the divider of the page, in place of the flat drawing.
-// Desktop and tablet only: below 700px the layout uses the narrow mobile picture,
-// which this scene does not match yet.
-import { mountHero, params } from "./hero-scene.js?v=3";
+// The cursor turns the scene the same way on every width; on a phone the handset
+// can turn it too.
+import { mountHero, params } from "./hero-scene.js?v=10";
 
 const box = document.getElementById("hero-3d");
 const divider = box && box.closest(".divider");
@@ -14,28 +14,48 @@ const calm = window.matchMedia("(prefers-reduced-motion: reduce)");
 const PAD_X = 1.08;
 const PAD_Y = 1.16;
 
+// Degrees of phone tilt that map onto the scene's full follow range. A rest pose
+// is taken from the first reading, so holding the phone as you opened the page
+// looks straight ahead.
+const GYRO_SPAN = 24;
+
 let hero = null;
+
+function variant() {
+    return wide.matches ? "desktop" : "mobile";
+}
 
 function start() {
     if (hero || !box || !divider) return;
     try {
-        hero = mountHero({ mount: box, padX: PAD_X, padY: PAD_Y });
-        // Swap only after the first frame is already in the DOM, so the flat
-        // drawing is not replaced by an empty box.
+        hero = mountHero({ mount: box, padX: PAD_X, padY: PAD_Y, variant: variant() });
         box.hidden = false;
         divider.classList.add("hero-3d-on");
+        bindInput();
     } catch (err) {
         hero = null;
     }
 }
 
 function stop() {
+    unbindGyro();
     if (!hero) return;
     hero.dispose();
     hero = null;
     anchor = null;
     box.hidden = true;
     divider.classList.remove("hero-3d-on");
+}
+
+function syncLayout() {
+    if (!hero) {
+        start();
+        return;
+    }
+    anchor = null;
+    hero.setVariant(variant());
+    hero.front();
+    bindInput();
 }
 
 // The scene turns only while the cursor is over the drawing itself, and it turns by
@@ -56,6 +76,10 @@ function leash(p, a) {
 
 function onMove(e) {
     if (!hero) return;
+    // A real phone already has the gyro: don't let a finger fight it. A mouse
+    // over the narrow layout still turns the scene, so the mobile drawing can
+    // be checked on a computer the same way as desktop.
+    if (gyroOrigin && e.pointerType === "touch") return;
     const r = box.getBoundingClientRect();
     // Hit-test the box ourselves: the drawing inside has pointer-events: none so
     // it never steals clicks from the header, and Safari would otherwise let the
@@ -78,22 +102,114 @@ function onMove(e) {
 
 function onLeave() {
     anchor = null;
-    if (hero) hero.release();
+    if (hero && !gyroOrigin) hero.release();
 }
 
-function sync() {
-    if (wide.matches) start();
-    else stop();
+let gyroOn = false;
+let gyroOrigin = null;
+let gyroArmed = false;
+let gyroPermitted = false;
+
+function screenAngle() {
+    const o = screen.orientation;
+    if (o && typeof o.angle === "number") return o.angle;
+    return typeof window.orientation === "number" ? window.orientation : 0;
+}
+
+// beta is front-back, gamma left-right. Rotate that pair into screen space so a
+// landscape hold still maps right-tilt to a yaw.
+function projectTilt(beta, gamma) {
+    const a = ((screenAngle() % 360) + 360) % 360;
+    if (a === 90) return { x: beta, y: -gamma };
+    if (a === 180) return { x: -gamma, y: -beta };
+    if (a === 270) return { x: -beta, y: gamma };
+    return { x: gamma, y: beta };
+}
+
+function onGyro(e) {
+    if (!hero || wide.matches || !params.followOn) return;
+    if (e.beta == null || e.gamma == null) return;
+    // A mouse over the narrow layout is driving the scene (desktop testing);
+    // don't let a leftover orientation reading yank it back.
+    if (anchor) return;
+    const mapped = projectTilt(e.beta, e.gamma);
+    if (!gyroOrigin) gyroOrigin = mapped;
+    hero.setPointer(
+        (mapped.x - gyroOrigin.x) / GYRO_SPAN,
+        -(mapped.y - gyroOrigin.y) / GYRO_SPAN
+    );
+}
+
+function unbindGyro() {
+    if (gyroOn) {
+        window.removeEventListener("deviceorientation", onGyro);
+        gyroOn = false;
+    }
+    gyroOrigin = null;
+}
+
+async function enableGyro() {
+    if (gyroOn || wide.matches || calm.matches || !hero) return;
+    try {
+        if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+            if (!gyroPermitted) {
+                const state = await DeviceOrientationEvent.requestPermission();
+                if (state !== "granted") return;
+                gyroPermitted = true;
+            }
+        }
+    } catch {
+        return;
+    }
+    if (gyroOn || wide.matches) return;
+    window.addEventListener("deviceorientation", onGyro, { passive: true });
+    gyroOn = true;
+}
+
+function onFirstGesture() {
+    enableGyro();
+}
+
+function armGyro() {
+    unbindGyro();
+    if (wide.matches || calm.matches) return;
+    const needsGesture =
+        typeof DeviceOrientationEvent !== "undefined" &&
+        typeof DeviceOrientationEvent.requestPermission === "function" &&
+        !gyroPermitted;
+    if (needsGesture) {
+        if (!gyroArmed) {
+            window.addEventListener("pointerdown", onFirstGesture, { passive: true });
+            gyroArmed = true;
+        }
+        return;
+    }
+    enableGyro();
+}
+
+function bindInput() {
+    if (wide.matches) unbindGyro();
+    else armGyro();
+}
+
+function onOrient() {
+    gyroOrigin = null;
 }
 
 if (box && divider) {
     params.followOn = !calm.matches;
-    wide.addEventListener("change", sync);
+    wide.addEventListener("change", syncLayout);
     calm.addEventListener("change", () => {
         params.followOn = !calm.matches;
         if (hero && calm.matches) hero.front();
+        bindInput();
     });
     window.addEventListener("pointermove", onMove, { passive: true });
     window.addEventListener("blur", onLeave);
-    sync();
+    window.addEventListener("orientationchange", onOrient);
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") gyroOrigin = null;
+        else if (hero && gyroOn) hero.release();
+    });
+    start();
 }

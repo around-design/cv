@@ -58,6 +58,10 @@ for (const id of ["followOn", "autoSpin", "overlay"]) {
 
 el("reset").addEventListener("click", () => hero.front());
 
+el("mobileLayout").addEventListener("change", () => {
+    hero.setVariant(el("mobileLayout").checked ? "mobile" : "desktop");
+});
+
 view.addEventListener("pointermove", (e) => {
     const r = view.getBoundingClientRect();
     hero.setPointer(((e.clientX - r.left) / r.width) * 2 - 1, ((e.clientY - r.top) / r.height) * 2 - 1);

@@ -1,9 +1,12 @@
 // Shape of the hero: the drawing of geometry.js lifted into three dimensions.
 // Plain numbers, no renderer — hero-scene.js projects these points into an SVG.
-import { HERO_GEOM as G } from "./geometry.js";
+import { HERO_GEOM as G, HERO_GEOM_MOBILE } from "./geometry.js";
 
-export const W = G.width;
-export const H = G.height;
+const GEOMS = { desktop: G, mobile: HERO_GEOM_MOBILE };
+
+let variant = "desktop";
+export let W = G.width;
+export let H = G.height;
 
 // Tuned in hero-3d/index.html and frozen here: this is the scene the site shows.
 // The panel writes straight into this object, so both stay in step.
@@ -14,7 +17,7 @@ export const params = {
     followOn: true,
     autoSpin: false,
     ballDepth: 0.8,
-    ballTwist: 0.39,
+    ballTwist: 0.13,
     zig: 0,
     starDepth: 1,
     starThick: 8,
@@ -37,8 +40,7 @@ function to3(x, y, z) {
     return [x - W / 2, -(y - H / 2), z];
 }
 
-function starCenter() {
-    const poly = G.starPolygon;
+function starCenterOf(poly) {
     let sx = 0;
     let sy = 0;
     for (const [x, y] of poly) {
@@ -63,12 +65,8 @@ function starCenter() {
     return [cx, cy];
 }
 
-const STAR_CENTER = starCenter();
-
-// Tips of the drawn star: the points of the polygon that stick out furthest.
-const STAR_TIPS = (() => {
-    const poly = G.starPolygon;
-    const [cx, cy] = STAR_CENTER;
+function starTipsOf(poly, center) {
+    const [cx, cy] = center;
     const n = poly.length;
     const d = poly.map(([x, y]) => Math.hypot(x - cx, y - cy));
     const tips = [];
@@ -78,7 +76,7 @@ const STAR_TIPS = (() => {
         if (d[i] >= prev && d[i] >= next) tips.push({ x: poly[i][0], y: poly[i][1], r: d[i] });
     }
     return tips;
-})();
+}
 
 function parseCubics(d) {
     const toks = d.match(/[A-Za-z]|[-+]?(?:\d*\.\d+|\d+)(?:e[-+]?\d+)?/gi);
@@ -116,52 +114,135 @@ function parseCubics(d) {
     return cubics;
 }
 
-const LINE_CUBICS = parseCubics(G.linePath);
+function cubicPoint(c, t) {
+    const u = 1 - t;
+    const uu = u * u;
+    const tt = t * t;
+    return [
+        uu * u * c[0] + 3 * uu * t * c[2] + 3 * u * tt * c[4] + tt * t * c[6],
+        uu * u * c[1] + 3 * uu * t * c[3] + 3 * u * tt * c[5] + tt * t * c[7],
+    ];
+}
 
-function sampleLinePath(d, spacing = 3.2) {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", d);
-    svg.appendChild(path);
-    svg.setAttribute("width", "0");
-    svg.setAttribute("height", "0");
-    document.body.appendChild(svg);
-    const len = path.getTotalLength();
-    const n = Math.max(2, Math.ceil(len / spacing));
-    const pts = [];
-    for (let i = 0; i <= n; i++) {
-        const p = path.getPointAtLength((len * i) / n);
-        pts.push([p.x, p.y]);
+function cubicLength(c, steps = 24) {
+    let len = 0;
+    let prev = cubicPoint(c, 0);
+    for (let i = 1; i <= steps; i++) {
+        const p = cubicPoint(c, i / steps);
+        len += Math.hypot(p[0] - prev[0], p[1] - prev[1]);
+        prev = p;
     }
-    svg.remove();
+    return len;
+}
+
+function cubicPointAtLength(c, dist, total, steps = 24) {
+    if (dist <= 0) return cubicPoint(c, 0);
+    if (dist >= total) return cubicPoint(c, 1);
+    let acc = 0;
+    let prev = cubicPoint(c, 0);
+    for (let i = 1; i <= steps; i++) {
+        const p = cubicPoint(c, i / steps);
+        const seg = Math.hypot(p[0] - prev[0], p[1] - prev[1]);
+        if (acc + seg >= dist) {
+            const u = seg <= 0 ? 0 : (dist - acc) / seg;
+            return [prev[0] + (p[0] - prev[0]) * u, prev[1] + (p[1] - prev[1]) * u];
+        }
+        acc += seg;
+        prev = p;
+    }
+    return cubicPoint(c, 1);
+}
+
+// Even steps along the path, without touching the document: inserting a live SVG
+// and asking getTotalLength forces a layout, and Safari stutters on first paint.
+function sampleLinePath(cubics, spacing = 3.2) {
+    const lens = cubics.map((c) => cubicLength(c));
+    let total = 0;
+    for (const len of lens) total += len;
+    const n = Math.max(2, Math.ceil(total / spacing));
+    const pts = [];
+    let acc = 0;
+    let ci = 0;
+    for (let i = 0; i <= n; i++) {
+        const target = (total * i) / n;
+        while (ci < lens.length - 1 && acc + lens[ci] < target) {
+            acc += lens[ci];
+            ci += 1;
+        }
+        pts.push(cubicPointAtLength(cubics[ci], target - acc, lens[ci]));
+    }
     return pts;
 }
 
-const line2d = sampleLinePath(G.linePath);
+const prepared = Object.create(null);
 
-// Last sharp corner of the path: after it the curve just runs out toward the dart.
-const RUNOUT_FROM = (() => {
-    const n = line2d.length;
-    const look = 8;
+function starLayout(geom) {
+    const starCenter = starCenterOf(geom.starPolygon);
+    const starTips = starTipsOf(geom.starPolygon, starCenter);
+    const starR = starTips.reduce((a, t) => a + t.r, 0) / starTips.length;
+    return { starCenter, starTips, starR };
+}
+
+function runoutFrom(stroke, look) {
+    const n = stroke.length;
     for (let i = n - 1 - look; i > look; i--) {
-        const a = line2d[i - look];
-        const b = line2d[i];
-        const c = line2d[i + look];
+        const a = stroke[i - look];
+        const b = stroke[i];
+        const c = stroke[i + look];
         const turn = Math.abs(
             Math.atan2(c[1] - b[1], c[0] - b[0]) - Math.atan2(b[1] - a[1], b[0] - a[0])
         );
         if (Math.min(turn, Math.PI * 2 - turn) > 0.6) return i;
     }
     return Math.round(n * 0.85);
-})();
+}
 
-const RUNOUT_LEN = (() => {
-    let sum = 0;
-    for (let i = RUNOUT_FROM + 1; i < line2d.length; i++) {
-        sum += Math.hypot(line2d[i][0] - line2d[i - 1][0], line2d[i][1] - line2d[i - 1][1]);
+function prepare(name) {
+    if (prepared[name]) return prepared[name];
+    const geom = GEOMS[name];
+    const spacing = Math.max(0.8, geom.width / 490);
+    const cubics = parseCubics(geom.linePath);
+    const stroke = sampleLinePath(cubics, spacing);
+    const look = Math.max(4, Math.round(8 * (3.2 / spacing)));
+    const from = runoutFrom(stroke, look);
+    let runLen = 0;
+    for (let i = from + 1; i < stroke.length; i++) {
+        runLen += Math.hypot(stroke[i][0] - stroke[i - 1][0], stroke[i][1] - stroke[i - 1][1]);
     }
-    return sum;
-})();
+    const end = stroke[stroke.length - 1];
+    const back = stroke[Math.max(0, stroke.length - look)];
+    const dx = end[0] - back[0];
+    const dy = end[1] - back[1];
+    const len = Math.hypot(dx, dy) || 1;
+    const star = starLayout(geom);
+    prepared[name] = {
+        geom,
+        cubics,
+        stroke,
+        runoutFrom: from,
+        runoutLen: runLen,
+        end,
+        dir: [dx / len, dy / len],
+        ...star,
+        step: Math.max(6, Math.round(6 * (3.2 / spacing))),
+    };
+    return prepared[name];
+}
+
+export function lineWidth() {
+    const geom = GEOMS[variant];
+    return params.width * ((geom.strokeWidth || 3) / 3);
+}
+
+export function setVariant(name) {
+    const next = name === "mobile" ? "mobile" : "desktop";
+    const changed = next !== variant;
+    variant = next;
+    const geom = GEOMS[variant];
+    W = geom.width;
+    H = geom.height;
+    return changed;
+}
 
 function smoothstep(a, b, x) {
     const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -171,8 +252,8 @@ function smoothstep(a, b, x) {
 // Depth of the coiled part: the curve is wrapped onto a sphere around the star,
 // so the spread in z matches the spread in the plane, and the tilt of each turn
 // precesses so the coil reads as a ball being unwound.
-function ballZ(stroke, scale, twist) {
-    const [cx, cy] = STAR_CENTER;
+function ballZ(stroke, scale, twist, center) {
+    const [cx, cy] = center;
     const n = stroke.length;
     const zs = new Float32Array(n);
     if (scale === 0) return zs;
@@ -253,17 +334,19 @@ function smoothSeries(zs, passes) {
     return out;
 }
 
-function lineDepth(stroke, tailZ) {
+function lineDepth(layout, tailZ) {
+    const stroke = layout.stroke;
     const n = stroke.length;
     // Last time the curve is still inside the coil; everything after is the zigzag run.
+    const coilX = layout.geom.coilX;
     let split = n - 1;
     for (let i = n - 1; i >= 0; i--) {
-        if (stroke[i][0] < 640) {
+        if (stroke[i][0] < coilX) {
             split = i;
             break;
         }
     }
-    const ball = ballZ(stroke, params.ballDepth, params.ballTwist);
+    const ball = ballZ(stroke, params.ballDepth, params.ballTwist, layout.starCenter);
     const zig = extremaZ(stroke, params.zig);
     const fade = Math.round(n * 0.12);
     const zs = new Float32Array(n);
@@ -273,9 +356,10 @@ function lineDepth(stroke, tailZ) {
     }
     // Run-out: the curve leaves the last zigzag flat and banks away from the
     // viewer, quadratically, so its slope at the very end is the one the dart flies.
-    const span = n - 1 - RUNOUT_FROM;
-    for (let i = RUNOUT_FROM; i < n; i++) {
-        const t = (i - RUNOUT_FROM) / span;
+    const runFrom = layout.runoutFrom;
+    const span = n - 1 - runFrom;
+    for (let i = runFrom; i < n; i++) {
+        const t = (i - runFrom) / span;
         zs[i] += tailZ * t * t;
     }
     const soft = smoothSeries(zs, 6);
@@ -339,15 +423,16 @@ function pushRay(out, center, apex, thick) {
 // Spiked ball: the drawn tips keep their place, depth only tilts their rays out of
 // the plane, so the front view still matches the drawing. All of it reads as one
 // black silhouette, so the triangles need neither sorting nor shading.
-function starShape(depthScale, thick) {
-    const [cx, cy] = STAR_CENTER;
+function starShape(layout, depthScale, thick) {
+    const [cx, cy] = layout.starCenter;
+    const tips = layout.starTips;
     const center = to3(cx, cy, 0);
-    const n = STAR_TIPS.length;
-    const radii = STAR_TIPS.map((t) => Math.hypot(t.x - cx, t.y - cy));
+    const n = tips.length;
+    const radii = tips.map((t) => Math.hypot(t.x - cx, t.y - cy));
     // Every ray reaches the same sphere, so the depth rays are no longer than
     // the drawn ones.
     const reach = (radii.reduce((a, b) => a + b, 0) / n) * depthScale;
-    const apexes = STAR_TIPS.map((t, k) => {
+    const apexes = tips.map((t, k) => {
         const lift = Math.sqrt(Math.max(0, reach * reach - radii[k] * radii[k]));
         const sign = k === n - 1 && n % 2 === 1 ? -1 : k % 2 ? -1 : 1;
         return to3(t.x, t.y, lift * sign);
@@ -397,21 +482,10 @@ const FIT = { yaw: 0.578885, pitch: -0.835355, roll: 0.071154, scale: 93.46092, 
 // Which of the two depth-mirrored poses has the nose pointing away from the viewer.
 const FLIP = -1;
 
-const LINE_END = line2d[line2d.length - 1];
-
-// Where the line is heading as it ends, so the dart can be set a little ahead of it.
-const LINE_DIR = (() => {
-    const back = line2d[Math.max(0, line2d.length - 8)];
-    const dx = LINE_END[0] - back[0];
-    const dy = LINE_END[1] - back[1];
-    const len = Math.hypot(dx, dy) || 1;
-    return [dx / len, dy / len];
-})();
-
 // Proportions and view angle come from the sliders, starting at the fit. The line
 // meets the dart at the mouth of the valley, between the wings, and the dart sits
 // a step further along the flight path so the two do not touch.
-function planeVerts() {
+function planeVerts(layout) {
     const rad = Math.PI / 180;
     const body = params.valleyW / 2;
     const model = planeModel(body, params.valleyH, body + params.wingW, FIT.rise);
@@ -435,16 +509,28 @@ function planeVerts() {
     // the same slope, and the dart is set further along that same path.
     const slope =
         (hook.z - flat.nose.z) / (Math.hypot(flat.nose.x - hook.x, flat.nose.y - hook.y) || 1);
-    const tailZ = (-slope * RUNOUT_LEN) / 2;
-    const px = LINE_END[0] + LINE_DIR[0] * params.gap;
-    const py = LINE_END[1] + LINE_DIR[1] * params.gap;
-    const pz = tailZ - slope * params.gap;
+    const tailZ = (-slope * layout.runoutLen) / 2;
+    // Same dart as on desktop, scaled to the drawing so the front view matches.
+    const desk = GEOMS.desktop.plane;
+    const here = layout.geom.plane;
+    const deskSpan = Math.hypot(desk.leftWing[0] - desk.nose[0], desk.leftWing[1] - desk.nose[1]);
+    const hereSpan = Math.hypot(here.leftWing[0] - here.nose[0], here.leftWing[1] - here.nose[1]);
+    const size = params.size * (hereSpan / deskSpan);
+    let px = layout.end[0] + layout.dir[0] * params.gap * (hereSpan / deskSpan);
+    let py = layout.end[1] + layout.dir[1] * params.gap * (hereSpan / deskSpan);
+    let along = params.gap * (hereSpan / deskSpan);
+    if (variant === "mobile") {
+        px = (here.leftFold[0] + here.rightFold[0]) / 2;
+        py = (here.leftFold[1] + here.rightFold[1]) / 2;
+        along = Math.hypot(px - layout.end[0], py - layout.end[1]);
+    }
+    const pz = tailZ - slope * along;
     const out = { tailZ };
     for (const k in flat) {
         out[k] = to3(
-            px + (flat[k].x - hook.x) * params.size,
-            py + (flat[k].y - hook.y) * params.size,
-            pz + (flat[k].z - hook.z) * params.size
+            px + (flat[k].x - hook.x) * size,
+            py + (flat[k].y - hook.y) * size,
+            pz + (flat[k].z - hook.z) * size
         );
     }
     return out;
@@ -460,7 +546,7 @@ function zAt(zs, i) {
 }
 
 // Walk the sampled stroke forward until it sits on (x, y).
-function advanceTo(pts, i, x, y) {
+function advanceTo(pts, i, x, y, step = 6) {
     let best = i;
     let bestD = (pts[i][0] - x) ** 2 + (pts[i][1] - y) ** 2;
     for (let k = i + 1; k < pts.length; k++) {
@@ -468,7 +554,7 @@ function advanceTo(pts, i, x, y) {
         if (d <= bestD) {
             bestD = d;
             best = k;
-        } else if (k - best > 6) break;
+        } else if (k - best > step) break;
     }
     return best;
 }
@@ -480,15 +566,16 @@ function cubicControlZ(z0, z13, z23, z1) {
     return [(2 * A - B) / 3, (2 * B - A) / 3];
 }
 
-function lineShape(zs) {
-    const start2 = LINE_CUBICS[0];
+function lineShape(layout, zs) {
+    const { cubics: src, stroke } = layout;
+    const start2 = src[0];
     const start = to3(start2[0], start2[1], zs[0]);
-    const cubics = new Float32Array(LINE_CUBICS.length * 9);
+    const cubics = new Float32Array(src.length * 9);
     let i0 = 0;
     let w = 0;
-    for (const c of LINE_CUBICS) {
-        const a = advanceTo(line2d, i0, c[0], c[1]);
-        const b = advanceTo(line2d, a, c[6], c[7]);
+    for (const c of src) {
+        const a = advanceTo(stroke, i0, c[0], c[1], layout.step);
+        const b = advanceTo(stroke, a, c[6], c[7], layout.step);
         i0 = b;
         const z0 = zs[a];
         const z3 = zs[b];
@@ -508,15 +595,16 @@ function lineShape(zs) {
         cubics[w + 8] = p3[2];
         w += 9;
     }
-    return { start, cubics, n: LINE_CUBICS.length };
+    return { start, cubics, n: src.length };
 }
 
 // Everything the renderer needs, in scene coordinates: one cubic stroke, one black
 // silhouette, four white faces. Rebuilt whenever a slider moves.
 export function buildShape() {
-    const v = planeVerts();
-    const zs = lineDepth(line2d, v.tailZ);
-    const line = lineShape(zs);
+    const layout = prepare(variant);
+    const v = planeVerts(layout);
+    const zs = lineDepth(layout, v.tailZ);
+    const line = lineShape(layout, zs);
     // Each face is drawn as a stroked triangle, and the three sides of these four
     // happen to be exactly the nine folds of the dart — so the creases come for
     // free, and a nearer face hides the ones behind it.
@@ -528,5 +616,7 @@ export function buildShape() {
         [v.nose, v.rootL, v.tipL],
         [v.nose, v.tipR, v.rootR],
     ];
-    return { line, star: starShape(params.starDepth, params.starThick), faces };
+    const deskR = starLayout(GEOMS.desktop).starR;
+    const thick = params.starThick * (layout.starR / deskR);
+    return { line, star: starShape(layout, params.starDepth, thick), faces };
 }

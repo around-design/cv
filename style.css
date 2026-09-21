@@ -146,24 +146,33 @@ h1 {
 .svg-desktop { display: block; width: 100%; max-width: 100%; height: auto; }
 .svg-mobile { display: none; }
 
-/* Трёхмерная версия разделителя. Пока скрипт не нарисовал сцену, в потоке остаётся плоский SVG. */
+/* Трёхмерный разделитель: фронтальный кадр уже в HTML, скрипт только
+   подключает наклон. Пустые sizer-ы держат пропорции, как img — иначе Safari
+   на узкой ширине раздувает min-content по aspect-ratio. */
 .hero-3d {
-    display: none;
+    display: block;
     position: relative;
     align-self: flex-start;
     width: 100%;
     min-width: 0;
-    aspect-ratio: 1577 / 589;
     overflow: visible;
-    /* Дети могут рисоваться снаружи при наклоне, но не должны раздувать ширину страницы. */
     contain: inline-size;
 }
 
-.divider.hero-3d-on .hero-3d { display: block; }
-.divider.hero-3d-on .svg-desktop { display: none; }
+.hero-3d .hero-sizer {
+    display: block;
+    width: 100%;
+    height: auto;
+    position: static;
+    left: auto;
+    top: auto;
+    pointer-events: none;
+}
+
+.hero-3d .hero-sizer.svg-mobile { display: none; }
 
 /* Запас по краям: при наклоне сцене есть куда выйти за рамку рисунка. */
-.hero-3d svg {
+.hero-3d svg.hero-scene {
     position: absolute;
     left: -4%;
     top: -8%;
@@ -173,6 +182,8 @@ h1 {
     overflow: visible;
     display: block;
 }
+
+.hero-3d svg.hero-scene-mobile { display: none; }
 
 /* --- ПРОЦЕСС (3 ШАГА) --- */
 .process {
@@ -207,7 +218,10 @@ a.project-image-link { border-bottom: none; display: block; }
     /* Геометрия маски — в долях ширины картинки. */
     --dur: 0.9s;                                /* длительность wipe эскиза */
     --wipe-ease: cubic-bezier(0.2, 0, 0.2, 1);
-    --fade-dur: 0.85s;                          /* длительность появления реальной */
+    --fade-dur: 0.85s;                          /* появление реальной картинки */
+    --lift-dur: 1.6s;                           /* медленный сдвиг, весь ход должен читаться */
+    --lift-delay: 0.8s;                         /* после старта fade */
+    --lift-ease: ease-in-out;
     --f: 2;                                     /* ширина растушёвки */
     --angle: 96deg;                             /* наклон границы; 90deg — вертикальная */
     --slack: 0.35;                              /* запас по краям под наклон */
@@ -229,10 +243,6 @@ a.project-image-link { border-bottom: none; display: block; }
     height: auto;
     display: block;
     border-radius: 8px;
-}
-
-body:not(.is-safari) .project-image img:not(.img-shadow) {
-    transform: translateZ(0);
 }
 
 /* Wipe-маска эскиза */
@@ -305,11 +315,29 @@ body.is-safari .project-image {
 .project-homestead { --shadow: 92, 78, 55; }    /* тёплый янтарь #E8E4E0 */
 .project-plates { --shadow: 95, 42, 42; }       /* серый #F0F0F0 + красный #90240C */
 
-/* CSS-тень по альфе — везде, кроме Сафари (там запечённый растр). */
+/*
+ * Тень по альфе (Chrome/Firefox). Три слоя:
+ * 1) лёгкий ореол 0 0 — ободок слева/сверху на светлых мокапах
+ * 2) тёмный контакт — при подъёме едет вправо-вниз (Y = 2X) и сильно размывается
+ * 3) мягкий ambient — ещё дальше и ещё мягче
+ */
 body:not(.is-safari) .img-hover-wrap {
-    filter: drop-shadow(0 0 6px rgba(var(--shadow), 0.10))
-            drop-shadow(10px 10px 16px rgba(var(--shadow), 0.08))
-            drop-shadow(24px 24px 30px rgba(var(--shadow), 0.07));
+    filter:
+        drop-shadow(0 0 5px rgba(var(--shadow), 0.10))
+        drop-shadow(2px 4px 3px rgba(var(--shadow), 0.16))
+        drop-shadow(6px 12px 14px rgba(var(--shadow), 0.05));
+    transition:
+        opacity var(--fade-dur) ease-in-out,
+        filter var(--lift-dur) var(--lift-ease);
+}
+body:not(.is-safari) .img-hover-wrap {
+    filter:
+        drop-shadow(0 0 5px rgba(var(--shadow), 0.10))
+        drop-shadow(2px 4px 3px rgba(var(--shadow), 0.16))
+        drop-shadow(6px 12px 14px rgba(var(--shadow), 0.05));
+    transition:
+        opacity var(--fade-dur) ease-in-out,
+        filter var(--lift-dur) var(--lift-ease);
 }
 
 /* Десктопный ховер */
@@ -326,6 +354,16 @@ body:not(.is-safari) .img-hover-wrap {
     .project:hover .img-hover-wrap,
     .project:hover .img-shadow {
         opacity: 1;
+    }
+
+    body:not(.is-safari) .project:hover .img-hover-wrap {
+        filter:
+            drop-shadow(0 0 12px rgba(var(--shadow), 0.08))
+            drop-shadow(18px 36px 32px rgba(var(--shadow), 0.10))
+            drop-shadow(32px 64px 56px rgba(var(--shadow), 0.05));
+        transition:
+            opacity var(--fade-dur) ease-in-out,
+            filter var(--lift-dur) var(--lift-ease) var(--lift-delay);
     }
 }
 
@@ -347,6 +385,16 @@ body:not(.is-safari) .img-hover-wrap {
     .project.is-active .img-hover-wrap,
     .project.is-active .img-shadow {
         opacity: 1;
+    }
+
+    body:not(.is-safari) .project.is-active .img-hover-wrap {
+        filter:
+            drop-shadow(0 0 12px rgba(var(--shadow), 0.08))
+            drop-shadow(18px 36px 32px rgba(var(--shadow), 0.10))
+            drop-shadow(32px 64px 56px rgba(var(--shadow), 0.05));
+        transition:
+            opacity var(--fade-dur) ease-in-out,
+            filter var(--lift-dur) var(--lift-ease) var(--lift-delay);
     }
 }
 
@@ -506,15 +554,11 @@ h2.side-quests-title {
     .side-quests-line { height: 28px; top: 6px; }
     .side-quests-line path { stroke-width: 1.5px; }
 
-    .svg-desktop {
-        display: block;
-        width: 118%;
-        max-width: none;
-        flex-shrink: 0;
-        height: auto;
-        position: relative;
-        left: 50%;
-        transform: translateX(-50%);
+    .hero-3d .hero-sizer.svg-desktop {
+        width: 100%;
+        left: auto;
+        transform: none;
+        position: static;
     }
     
     .process { display: none; }
@@ -574,7 +618,7 @@ h2.side-quests-title {
     .divider { margin-bottom: 80px; }
     .col-hero { margin-bottom: 100px; }
 
-    /* Трёхмерный герой выходит за поля так же, как плоская картинка. */
+    /* Трёхмерный герой выходит за поля так же, как раньше плоская картинка. */
     .hero-3d {
         width: 118%;
         max-width: none;
@@ -587,32 +631,28 @@ h2.side-quests-title {
 @media (max-width: 700px) {
     .page-wrapper { padding: 16px; overflow-x: clip; }
     .svg-desktop { display: none; }
-    /* В мобиле рисунок другой — сцену не монтируем и вынимаем из потока,
-       иначе Safari считает её min-content по aspect-ratio ~1577px и
-       не даёт странице сжаться до ширины экрана. */
-    .hero-3d,
-    .divider.hero-3d-on .hero-3d {
-        display: none;
-        width: 0;
-        height: 0;
-        max-width: 0;
-        overflow: hidden;
-        position: absolute;
-        left: auto;
-        transform: none;
-        flex-shrink: 1;
-        aspect-ratio: auto;
-        contain: none;
-        pointer-events: none;
-    }
-    .svg-mobile { 
-        display: block; 
-        width: 120%; 
-        max-width: none; 
-        flex-shrink: 0; 
+    .hero-3d {
+        width: 120%;
+        max-width: none;
         height: auto;
+        overflow: visible;
         position: relative;
         left: 50%;
         transform: translateX(-46%);
+        flex-shrink: 0;
+        contain: none;
+        pointer-events: none;
     }
+    .hero-3d .hero-sizer.svg-desktop { display: none; }
+    .hero-3d .hero-sizer.svg-mobile {
+        display: block;
+        width: 100%;
+        max-width: none;
+        left: auto;
+        transform: none;
+        position: static;
+    }
+    .hero-3d svg.hero-scene-desktop { display: none; }
+    .hero-3d svg.hero-scene-mobile { display: block; }
+    .svg-mobile { display: none; }
 }
