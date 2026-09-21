@@ -64,8 +64,11 @@ function syncLayout() {
 // A share of the drawing's width or height crossed turns the scene by that share of
 // its range, so crossing the whole drawing does not quite reach the limit.
 const GAIN = 0.45;
-// Scroll maps onto the same range as a typical hover, not the full follow stop.
-const SCROLL_GAIN = 0.65;
+const MOBILE_GAIN = 0.75;
+const FOLLOW_DESKTOP = 14;
+const FOLLOW_MOBILE = 20;
+// Full follow range over one drawing-height of scroll.
+const SCROLL_GAIN = 1;
 const LOCK = 10;
 // Where the cursor would have to be for the scene to look straight ahead.
 let anchor = null;
@@ -79,10 +82,14 @@ function clamp(v, a, b) {
     return Math.min(b, Math.max(a, v));
 }
 
+function yawGain() {
+    return wide.matches ? GAIN : MOBILE_GAIN;
+}
+
 // Keep the anchor within reach of the limits, so a tilt pinned at its end still
 // answers the first backward move instead of waiting out the overshoot.
 function leash(p, a) {
-    const span = 1 / GAIN;
+    const span = 1 / yawGain();
     return Math.min(p + span, Math.max(p - span, a));
 }
 
@@ -156,12 +163,13 @@ function driveMouseYaw(e) {
         return;
     }
     const px = pxOf(e, r);
+    const g = yawGain();
     if (!anchor) {
         const t = hero.tilt();
-        anchor = { x: px - t.x / GAIN };
+        anchor = { x: px - t.x / g };
     }
     anchor.x = leash(px, anchor.x);
-    yaw = (px - anchor.x) * GAIN;
+    yaw = (px - anchor.x) * g;
     apply(false);
 }
 
@@ -205,14 +213,14 @@ function onDragMove(e) {
             const r = boxRect();
             const px = pxOf(e, r);
             const t = hero.tilt();
-            drag.anchorX = px - t.x / GAIN;
+            drag.anchorX = px - t.x / yawGain();
         }
     }
     if (drag.axis !== "x") return;
     const r = boxRect();
     const px = pxOf(e, r);
     drag.anchorX = leash(px, drag.anchorX);
-    yaw = (px - drag.anchorX) * GAIN;
+    yaw = (px - drag.anchorX) * yawGain();
     apply(false);
 }
 
@@ -256,6 +264,7 @@ function bindMobile() {
 }
 
 function bindInput() {
+    params.follow = wide.matches ? FOLLOW_DESKTOP : FOLLOW_MOBILE;
     if (wide.matches) {
         unbindMobile();
         yaw = 0;
