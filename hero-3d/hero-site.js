@@ -76,10 +76,9 @@ function leash(p, a) {
 
 function onMove(e) {
     if (!hero) return;
-    // A real phone already has the gyro: don't let a finger fight it. A mouse
-    // over the narrow layout still turns the scene, so the mobile drawing can
-    // be checked on a computer the same way as desktop.
-    if (gyroOrigin && e.pointerType === "touch") return;
+    // A tap on a phone would pin this hover-anchor, and onGyro then refuses
+    // to turn the scene. Mouse still drives the narrow layout on a computer.
+    if (!wide.matches && e.pointerType !== "mouse") return;
     const r = box.getBoundingClientRect();
     // Hit-test the box ourselves: the drawing inside has pointer-events: none so
     // it never steals clicks from the header, and Safari would otherwise let the
@@ -109,6 +108,7 @@ let gyroOn = false;
 let gyroOrigin = null;
 let gyroArmed = false;
 let gyroPermitted = false;
+let gyroAsking = false;
 
 function screenAngle() {
     const o = screen.orientation;
@@ -133,58 +133,96 @@ function onGyro(e) {
     // don't let a leftover orientation reading yank it back.
     if (anchor) return;
     const mapped = projectTilt(e.beta, e.gamma);
-    if (!gyroOrigin) gyroOrigin = mapped;
+    if (!gyroOrigin) gyroOrigin = { x: mapped.x, y: mapped.y, type: e.type };
+    else if (gyroOrigin.type !== e.type) return;
     hero.setPointer(
         (mapped.x - gyroOrigin.x) / GYRO_SPAN,
         -(mapped.y - gyroOrigin.y) / GYRO_SPAN
     );
 }
 
-function unbindGyro() {
-    if (gyroOn) {
-        window.removeEventListener("deviceorientation", onGyro);
-        gyroOn = false;
-    }
-    gyroOrigin = null;
+function dropGestureHooks() {
+    document.removeEventListener("click", onFirstGesture, true);
+    gyroArmed = false;
 }
 
-async function enableGyro() {
-    if (gyroOn || wide.matches || calm.matches || !hero) return;
-    try {
-        if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
-            if (!gyroPermitted) {
-                const state = await DeviceOrientationEvent.requestPermission();
-                if (state !== "granted") return;
-                gyroPermitted = true;
-            }
-        }
-    } catch {
-        return;
-    }
-    if (gyroOn || wide.matches) return;
+function listenGyro() {
+    if (gyroOn || wide.matches || !hero) return;
     window.addEventListener("deviceorientation", onGyro, { passive: true });
+    window.addEventListener("deviceorientationabsolute", onGyro, { passive: true });
     gyroOn = true;
 }
 
+function unbindGyro() {
+    window.removeEventListener("deviceorientation", onGyro);
+    window.removeEventListener("deviceorientationabsolute", onGyro);
+    dropGestureHooks();
+    gyroOn = false;
+    gyroOrigin = null;
+    if (hero) hero.release();
+}
+
 function onFirstGesture() {
-    enableGyro();
+    if (wide.matches || gyroAsking) return;
+    // Subscribe in the same turn as the tap: iOS is picky about both the
+    // permission call and the listener happening inside the user gesture.
+    listenGyro();
+    const oriReq =
+        typeof DeviceOrientationEvent !== "undefined" && DeviceOrientationEvent.requestPermission;
+    const motReq = typeof DeviceMotionEvent !== "undefined" && DeviceMotionEvent.requestPermission;
+    if (typeof oriReq === "function" && !gyroPermitted) {
+        gyroAsking = true;
+        if (typeof motReq === "function") {
+            try {
+                motReq.call(DeviceMotionEvent);
+            } catch {
+                /* motion permission is optional */
+            }
+        }
+        try {
+            Promise.resolve(oriReq.call(DeviceOrientationEvent))
+                .then((state) => {
+                    gyroAsking = false;
+                    if (state !== "granted") {
+                        window.removeEventListener("deviceorientation", onGyro);
+                        window.removeEventListener("deviceorientationabsolute", onGyro);
+                        gyroOn = false;
+                        return;
+                    }
+                    gyroPermitted = true;
+                    dropGestureHooks();
+                })
+                .catch(() => {
+                    gyroAsking = false;
+                    window.removeEventListener("deviceorientation", onGyro);
+                    window.removeEventListener("deviceorientationabsolute", onGyro);
+                    gyroOn = false;
+                });
+        } catch {
+            gyroAsking = false;
+            window.removeEventListener("deviceorientation", onGyro);
+            window.removeEventListener("deviceorientationabsolute", onGyro);
+            gyroOn = false;
+        }
+        return;
+    }
+    dropGestureHooks();
 }
 
 function armGyro() {
-    unbindGyro();
-    if (wide.matches || calm.matches) return;
+    if (wide.matches) return;
     const needsGesture =
         typeof DeviceOrientationEvent !== "undefined" &&
         typeof DeviceOrientationEvent.requestPermission === "function" &&
         !gyroPermitted;
     if (needsGesture) {
         if (!gyroArmed) {
-            window.addEventListener("pointerdown", onFirstGesture, { passive: true });
+            document.addEventListener("click", onFirstGesture, true);
             gyroArmed = true;
         }
         return;
     }
-    enableGyro();
+    listenGyro();
 }
 
 function bindInput() {
@@ -196,12 +234,18 @@ function onOrient() {
     gyroOrigin = null;
 }
 
+function syncFollowFlag() {
+    // Hover/tilt only moves when the person does; keep phone tilt even if
+    // Reduce Motion is on, otherwise the mobile scene is a still.
+    params.followOn = !calm.matches || !wide.matches;
+}
+
 if (box && divider) {
-    params.followOn = !calm.matches;
+    syncFollowFlag();
     wide.addEventListener("change", syncLayout);
     calm.addEventListener("change", () => {
-        params.followOn = !calm.matches;
-        if (hero && calm.matches) hero.front();
+        syncFollowFlag();
+        if (hero && calm.matches && wide.matches) hero.front();
         bindInput();
     });
     window.addEventListener("pointermove", onMove, { passive: true });
