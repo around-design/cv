@@ -8,7 +8,7 @@
     <meta name="author" content="Валентин Филиппов">
     <link rel="canonical" href="https://cv.around.design/">
     <link href="images/favicon.png" rel="icon">
-    <link rel="stylesheet" href="style.css?v=68">
+    <link rel="stylesheet" href="style.css?v=71">
     <link rel="modulepreload" href="hero-3d/hero-site.js?v=18">
     <link rel="modulepreload" href="hero-3d/hero-scene.js?v=11">
     <link rel="modulepreload" href="hero-3d/hero-shape.js?v=7">
@@ -363,9 +363,14 @@
                     return { data: out, w: pw, h: ph };
                 };
 
-                const bakeShadow = (ctx, padded, rgb, scale, outW, outH) => {
-                    const acc = new Float32Array(outW * outH);
-                    for (const [dx, dy, blur, opacity] of LAYERS) {
+                const bakeShadow = (ctx, padded, layers, scale, outW, outH) => {
+                    const n = outW * outH;
+                    const accR = new Float32Array(n);
+                    const accG = new Float32Array(n);
+                    const accB = new Float32Array(n);
+                    const accA = new Float32Array(n);
+                    for (const [dx, dy, blur, opacity, rgb] of layers) {
+                        const [cr, cg, cb] = rgb;
                         const blurred = new Float32Array(padded.data);
                         blurAlpha(blurred, padded.w, padded.h, (blur * scale) / 2);
                         const ox = Math.round(dx * scale);
@@ -382,20 +387,25 @@
                                 const a = blurred[srcRow + x] * aScale;
                                 if (a <= 0) continue;
                                 const i = dstRow + xx;
-                                acc[i] = a + acc[i] * (1 - a);
+                                const keep = 1 - a;
+                                accR[i] = cr * a + accR[i] * keep;
+                                accG[i] = cg * a + accG[i] * keep;
+                                accB[i] = cb * a + accB[i] * keep;
+                                accA[i] = a + accA[i] * keep;
                             }
                         }
                     }
 
                     const image = ctx.createImageData(outW, outH);
                     const d = image.data;
-                    const [cr, cg, cb] = rgb;
-                    for (let j = 0, i = 0; j < acc.length; j++, i += 4) {
-                        const a = acc[j] * 255 + (Math.random() + Math.random() - 1);
+                    for (let j = 0, i = 0; j < n; j++, i += 4) {
+                        const alpha = accA[j];
+                        if (alpha <= 0) continue;
+                        const a = alpha * 255 + (Math.random() + Math.random() - 1);
                         if (a < 0.5) continue;
-                        d[i] = cr;
-                        d[i + 1] = cg;
-                        d[i + 2] = cb;
+                        d[i] = Math.round(accR[j] / alpha);
+                        d[i + 1] = Math.round(accG[j] / alpha);
+                        d[i + 2] = Math.round(accB[j] / alpha);
                         d[i + 3] = a > 255 ? 255 : a;
                     }
                     return image;
@@ -420,7 +430,13 @@
                     }
                 });
 
-                const paint = async (holder, img, rgb) => {
+                const shadowLayers = (rgb, nearRgb, nearOpacity) => LAYERS.map((layer, index) => (
+                    index === 0
+                        ? [layer[0], layer[1], layer[2], nearOpacity, nearRgb]
+                        : [layer[0], layer[1], layer[2], layer[3], rgb]
+                ));
+
+                const paint = async (holder, img, rgb, nearRgb, nearOpacity) => {
                     const cssW = Math.round(img.getBoundingClientRect().width);
                     const cssH = Math.round(img.getBoundingClientRect().height);
                     if (!img.naturalWidth || cssW < 2 || cssH < 2) return false;
@@ -451,20 +467,30 @@
                         alpha = null;
                     }
 
+                    const layers = shadowLayers(rgb, nearRgb, nearOpacity);
+
                     if (alpha) {
                         const padded = padAlpha(alpha, w, h, pad);
-                        ctx.putImageData(bakeShadow(ctx, padded, rgb, scale, out.width, out.height), 0, 0);
+                        ctx.putImageData(bakeShadow(ctx, padded, layers, scale, out.width, out.height), 0, 0);
                     } else {
-                        const [r, g, b] = rgb;
-                        const tinted = document.createElement('canvas');
-                        tinted.width = w + pad * 2;
-                        tinted.height = h + pad * 2;
-                        const tctx = tinted.getContext('2d');
-                        tctx.drawImage(sil, pad, pad);
-                        tctx.globalCompositeOperation = 'source-in';
-                        tctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-                        tctx.fillRect(0, 0, tinted.width, tinted.height);
-                        for (const [dx, dy, blur, opacity] of LAYERS) {
+                        const tints = new Map();
+                        const tintFor = (color) => {
+                            const key = color.join(',');
+                            if (tints.has(key)) return tints.get(key);
+                            const [r, g, b] = color;
+                            const tinted = document.createElement('canvas');
+                            tinted.width = w + pad * 2;
+                            tinted.height = h + pad * 2;
+                            const tctx = tinted.getContext('2d');
+                            tctx.drawImage(sil, pad, pad);
+                            tctx.globalCompositeOperation = 'source-in';
+                            tctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                            tctx.fillRect(0, 0, tinted.width, tinted.height);
+                            tints.set(key, tinted);
+                            return tinted;
+                        };
+                        for (const [dx, dy, blur, opacity, color] of layers) {
+                            const tinted = tintFor(color);
                             ctx.save();
                             ctx.globalAlpha = opacity;
                             const spread = Math.max(1, Math.round((blur * scale) / 2));
@@ -538,7 +564,10 @@
                     holder.setAttribute('aria-hidden', 'true');
                     box.insertBefore(holder, wrap);
 
-                    const rgb = parseRgb(getComputedStyle(project).getPropertyValue('--shadow') || '0, 0, 0');
+                    const shadowStyle = getComputedStyle(project);
+                    const rgb = parseRgb(shadowStyle.getPropertyValue('--shadow') || '0, 0, 0');
+                    const nearRgb = parseRgb(shadowStyle.getPropertyValue('--shadow-near') || rgb.join(', '));
+                    const nearOpacity = Number.parseFloat(shadowStyle.getPropertyValue('--shadow-near-a')) || LAYERS[0][3];
                     let lastKey = '';
                     let gen = 0;
                     let priority = 0;
@@ -550,7 +579,7 @@
                             stale: () => token !== gen,
                             run: async () => {
                                 if (token !== gen) return;
-                                const ok = await paint(holder, img, rgb);
+                                const ok = await paint(holder, img, rgb, nearRgb, nearOpacity);
                                 if (ok && token === gen) {
                                     const rect = img.getBoundingClientRect();
                                     lastKey = `${Math.round(rect.width)}x${Math.round(rect.height)}`;
