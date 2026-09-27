@@ -1,8 +1,9 @@
 // Наклон и тень картинок проектов — те же настройки, что на стенде.
 // Пока картинка проявляется, она прямая. Если курсор или палец уже были на ней,
 // наклон начинается только со следующего движения.
-// На телефоне палец поворачивает картинку, пока ближний угол не подойдёт
-// к странице: 1,5° десктопа на маленькой карточке почти не видны.
+// На телефоне карточка выше и перспектива ближе, чем на десктопе: иначе
+// на маленьком кадре тот же наклон почти не виден. Палец доводит ближний
+// угол до страницы, и это больший угол, чем 1,5° курсора.
 // До этого предела страница не листается. Дальше она едет за пальцем
 // сдвигом слоя, а не scrollBy: прокрутка окна прямо во время касания
 // на айфоне спорит со свайпом и дёргает страницу вверх-вниз.
@@ -11,7 +12,9 @@
 const PAD = 220;
 const FINGER_SLOP = 8;
 const FINGER_REACH = 64;
-const FINGER_MAX = 16 * Math.PI / 180;
+const FINGER_MAX = 60 * Math.PI / 180;
+const FINGER_LIFT = 40;
+const FINGER_PERSPECTIVE = 720;
 const FLING_MAX = 2;
 const narrowLayout = window.matchMedia("(max-width: 950px)");
 const TILT = {
@@ -430,6 +433,11 @@ function readColors(project) {
 
 function canTilt() {
     return window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+}
+
+function useTiltSpace() {
+    TILT.lift = canTilt() ? 24 : FINGER_LIFT;
+    TILT.perspective = canTilt() ? 1410 : FINGER_PERSPECTIVE;
 }
 
 // На узкой вёрстке те же три света, но вдвое ближе и вдвое резче:
@@ -1051,6 +1059,7 @@ export function initProjectTilts() {
 
     function paint(card, dt) {
         if (!card.shown()) return false;
+        useTiltSpace();
         noteOpaque(card);
         const animating = step(card, dt);
         const img = card.img;
