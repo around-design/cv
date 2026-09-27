@@ -1,7 +1,7 @@
 // Puts the hero scene into the divider of the page, in place of the flat drawing.
 // On a wide screen the cursor turns the scene. On a phone the page scroll tips
 // it, and a horizontal finger on the drawing yaws it the same way as hover.
-import { mountHero, params } from "./hero-scene.js?v=11";
+import { mountHero, params } from "./hero-scene.js?v=12";
 
 const box = document.getElementById("hero-3d");
 const divider = box && box.closest(".divider");

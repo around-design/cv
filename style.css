@@ -287,6 +287,15 @@ body.has-project-tilt .img-hover {
     opacity: 0;
 }
 
+/* Телефон: фото остаётся тегом img, холст под ним — только тень. */
+@media (hover: none), (pointer: coarse) {
+    body.has-project-tilt .img-hover {
+        position: relative;
+        z-index: 2;
+        opacity: 1;
+    }
+}
+
 .img-tilt {
     position: absolute;
     z-index: 1;

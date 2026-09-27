@@ -3,6 +3,7 @@
 // наклон начинается только со следующего движения.
 
 const PAD = 220;
+const narrowLayout = window.matchMedia("(max-width: 950px)");
 const TILT = {
     lift: 24,
     perspective: 1410,
@@ -421,6 +422,18 @@ function canTilt() {
     return window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 }
 
+// На узкой вёрстке те же три света, но вдвое ближе и вдвое резче:
+// карточка меньше, и десктопный размах выглядит слишком большим.
+function shadowLights() {
+    if (!narrowLayout.matches) return TILT.lights;
+    return TILT.lights.map((light) => ({
+        x: light.x * 0.5,
+        y: light.y * 0.5,
+        blur: light.blur * 0.5,
+        opacity: light.opacity,
+    }));
+}
+
 function createEngine(canvas) {
     const gl = canvas.getContext("webgl2", {
         alpha: true,
@@ -679,7 +692,7 @@ function createEngine(canvas) {
         return read;
     }
 
-    function blurMasks(lightHs, zPack) {
+    function blurMasks(lightHs, zPack, lights) {
         attachDraw(halfTex[0]);
         gl.viewport(0, 0, halfW, halfH);
         gl.useProgram(downProg);
@@ -706,9 +719,9 @@ function createEngine(canvas) {
             gl.uniform4fv(locs.boxZ, zPack);
             gl.uniform2f(locs.boxHalf, halfW, halfH);
             gl.uniform2f(locs.boxFull, shadowW, shadowH);
-            gl.uniform2f(locs.boxB0, TILT.lights[0].blur, TILT.lights[0].opacity);
-            gl.uniform2f(locs.boxB1, TILT.lights[1].blur, TILT.lights[1].opacity);
-            gl.uniform2f(locs.boxB2, TILT.lights[2].blur, TILT.lights[2].opacity);
+            gl.uniform2f(locs.boxB0, lights[0].blur, lights[0].opacity);
+            gl.uniform2f(locs.boxB1, lights[1].blur, lights[1].opacity);
+            gl.uniform2f(locs.boxB2, lights[2].blur, lights[2].opacity);
             gl.uniform1f(locs.boxLift, TILT.lift);
             gl.uniform1f(locs.boxGain, TILT.gain);
             gl.uniform1f(locs.boxMinFrac, minFrac);
@@ -723,6 +736,8 @@ function createEngine(canvas) {
         if (!layout || layout.cardW < 2 || layout.cardH < 2) return false;
         if (!img.complete || !img.naturalWidth) return false;
 
+        const lights = shadowLights();
+        const drawPhoto = canTilt();
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const shW = Math.max(2, Math.round(layout.shW));
         const shH = Math.max(2, Math.round(layout.shH));
@@ -761,7 +776,7 @@ function createEngine(canvas) {
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
 
-        TILT.lights.forEach((light, index) => {
+        lights.forEach((light, index) => {
             const shifted = cardCorners.map((corner) => {
                 const shift = Math.max(corner.z / TILT.lift, minFrac);
                 return {
@@ -786,7 +801,7 @@ function createEngine(canvas) {
         });
         gl.colorMask(true, true, true, true);
         if (!lightHs[0] || !lightHs[1] || !lightHs[2]) return false;
-        blurMasks(lightHs, zPack);
+        blurMasks(lightHs, zPack, lights);
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, bw, bh);
@@ -800,9 +815,9 @@ function createEngine(canvas) {
         gl.uniformMatrix3fv(locs.uH1, false, lightHs[1]);
         gl.uniformMatrix3fv(locs.uH2, false, lightHs[2]);
         gl.uniform4fv(locs.uZ, zPack);
-        gl.uniform2f(locs.uL0, TILT.lights[0].blur, TILT.lights[0].opacity);
-        gl.uniform2f(locs.uL1, TILT.lights[1].blur, TILT.lights[1].opacity);
-        gl.uniform2f(locs.uL2, TILT.lights[2].blur, TILT.lights[2].opacity);
+        gl.uniform2f(locs.uL0, lights[0].blur, lights[0].opacity);
+        gl.uniform2f(locs.uL1, lights[1].blur, lights[1].opacity);
+        gl.uniform2f(locs.uL2, lights[2].blur, lights[2].opacity);
         gl.uniform2f(locs.uCanvas, bw, bh);
         gl.uniform2f(locs.uShadow, shadowW, shadowH);
         gl.uniform1f(locs.uLift, TILT.lift);
@@ -815,6 +830,10 @@ function createEngine(canvas) {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+        // Без точного указателя картинка остаётся самим <img>: холст рисует только тень.
+        // Иначе фото проходит через текстуру с потолком 2 px на CSS-пиксель и на телефоне мылится.
+        if (!drawPhoto) return true;
 
         const toBufX = bw / shW;
         const toBufY = bh / shH;

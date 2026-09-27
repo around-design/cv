@@ -5,6 +5,9 @@ import { HERO_GEOM as G, HERO_GEOM_MOBILE } from "./geometry.js";
 const GEOMS = { desktop: G, mobile: HERO_GEOM_MOBILE };
 
 let variant = "desktop";
+// Расплетание витков. 0.39 — десктоп, как до мобильной линии. 0.13 остаётся
+// у короткой линии: общее число уводило десктопные витки не в ту сторону.
+const ballTwistByVariant = { desktop: 0.39, mobile: 0.13 };
 export let W = G.width;
 export let H = G.height;
 
@@ -17,7 +20,7 @@ export const params = {
     followOn: true,
     autoSpin: false,
     ballDepth: 0.8,
-    ballTwist: 0.13,
+    ballTwist: 0.39,
     zig: 0,
     starDepth: 1,
     starThick: 8,
@@ -237,7 +240,9 @@ export function lineWidth() {
 export function setVariant(name) {
     const next = name === "mobile" ? "mobile" : "desktop";
     const changed = next !== variant;
+    if (changed) ballTwistByVariant[variant] = params.ballTwist;
     variant = next;
+    params.ballTwist = ballTwistByVariant[variant];
     const geom = GEOMS[variant];
     W = geom.width;
     H = geom.height;

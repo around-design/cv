@@ -60,6 +60,9 @@ el("reset").addEventListener("click", () => hero.front());
 
 el("mobileLayout").addEventListener("change", () => {
     hero.setVariant(el("mobileLayout").checked ? "mobile" : "desktop");
+    const twist = el("ballTwist");
+    twist.value = String(params.ballTwist);
+    el("v-ballTwist").textContent = String(params.ballTwist);
 });
 
 view.addEventListener("pointermove", (e) => {

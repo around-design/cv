@@ -1,7 +1,7 @@
 // Draws the hero shape as an SVG: the scene is line art with a handful of flat
 // faces, so projecting it by hand every frame is cheaper than an engine, and the
 // page gets the drawing in a couple of kilobytes instead of a megabyte.
-import { params, buildShape, W, H, setVariant as applyVariant, lineWidth } from "./hero-shape.js?v=7";
+import { params, buildShape, W, H, setVariant as applyVariant, lineWidth } from "./hero-shape.js?v=8";
 
 export { params };
 
