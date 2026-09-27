@@ -1,13 +1,16 @@
 // Наклон и тень картинок проектов — те же настройки, что на стенде.
 // Пока картинка проявляется, она прямая. Если курсор или палец уже были на ней,
 // наклон начинается только со следующего движения.
-// На телефоне палец поворачивает картинку во все стороны, не дальше того же угла,
-// что курсор на десктопе. Короткий сдвиг доходит до предела; дальше по вертикали
-// страница листается.
+// На телефоне палец поворачивает картинку, пока ближний угол не подойдёт
+// к странице: 1,5° десктопа на маленькой карточке почти не видны.
+// До этого предела страница не листается. Дальше палец двигает страницу
+// как обычный свайп (вниз пальцем — к началу). Тот же жест Safari уже
+// не забирает, поэтому листание здесь, один к одному с пальцем.
 
 const PAD = 220;
 const FINGER_SLOP = 8;
 const FINGER_REACH = 64;
+const FINGER_MAX = 16 * Math.PI / 180;
 const narrowLayout = window.matchMedia("(max-width: 950px)");
 const TILT = {
     lift: 24,
@@ -942,7 +945,9 @@ export function initProjectTilts() {
     }
 
     function ownTouch(card) {
-        card.box.style.touchAction = card.revealed && !canTilt() ? "none" : "";
+        const own = card.revealed && !canTilt() ? "none" : "";
+        card.box.style.touchAction = own;
+        card.img.style.touchAction = own;
     }
 
     function markPlane(card) {
@@ -971,9 +976,8 @@ export function initProjectTilts() {
         const hw = layout.cardW / 2;
         const hh = layout.cardH / 2;
         if (card.tiltLive && card.finger) {
-            const maxTilt = TILT.cursorRange * Math.PI / 180;
-            tax = -card.finger.ny * maxTilt;
-            tay = card.finger.nx * maxTilt;
+            tax = -card.finger.ny * FINGER_MAX;
+            tay = card.finger.nx * FINGER_MAX;
         } else if (card.tiltLive && card.pointer && canTilt()) {
             const maxTilt = TILT.cursorRange * Math.PI / 180;
             const shown = fitScale(card.rawAx, card.rawAy, hw, hh, TILT.lift);
@@ -993,9 +997,15 @@ export function initProjectTilts() {
             card.rawAx = 0;
             card.rawAy = 0;
         } else {
-            const ease = 1 - Math.exp(-dt / TILT.fastTau);
+            const tau = card.finger ? 45 : TILT.fastTau;
+            const ease = 1 - Math.exp(-dt / tau);
             card.rawAx += (tax - card.rawAx) * ease;
             card.rawAy += (tay - card.rawAy) * ease;
+            if (!card.finger && !card.pointer && Math.hypot(card.rawAx, card.rawAy) < 1e-3) {
+                card.tiltLive = false;
+                card.rawAx = 0;
+                card.rawAy = 0;
+            }
         }
         const fitted = fitScale(card.rawAx, card.rawAy, hw, hh, TILT.lift);
         card.ax = card.rawAx * fitted;
@@ -1038,7 +1048,7 @@ export function initProjectTilts() {
     }
 
     function resetInteraction(card) {
-        const finger = card.finger;
+        if (card.finger) return;
         card.tiltLive = false;
         card.revealed = false;
         card.anchor = null;
@@ -1051,7 +1061,8 @@ export function initProjectTilts() {
         card.animating = false;
         card.drawPhoto = canTilt();
         card.wrap.classList.remove("is-tilting");
-        if (!finger) card.box.style.touchAction = "";
+        card.box.style.touchAction = "";
+        card.img.style.touchAction = "";
     }
 
     function placePointer(card, event) {
@@ -1121,7 +1132,7 @@ export function initProjectTilts() {
         card.suppressClick = true;
         if (!card.revealed || !card.shown()) {
             const delta = event.clientY - prevY;
-            if (delta) window.scrollBy(0, delta);
+            if (delta) window.scrollBy(0, -delta);
             return;
         }
         card.tiltLive = true;
@@ -1130,7 +1141,7 @@ export function initProjectTilts() {
         const surplus = dy - Math.max(-FINGER_REACH, Math.min(FINGER_REACH, dy));
         const delta = surplus - finger.scrolled;
         finger.scrolled = surplus;
-        if (delta) window.scrollBy(0, delta);
+        if (delta) window.scrollBy(0, -delta);
         card.needsPaint = true;
         schedule();
     }
@@ -1141,7 +1152,6 @@ export function initProjectTilts() {
         const flung = Math.abs(finger.scrolled) > 0 && Math.abs(finger.vy) > 0.3;
         const vy = finger.vy;
         card.finger = null;
-        card.tiltLive = false;
         if (event && card.box.hasPointerCapture && card.box.hasPointerCapture(event.pointerId)) {
             card.box.releasePointerCapture(event.pointerId);
         }
@@ -1149,10 +1159,15 @@ export function initProjectTilts() {
             card.needsPaint = true;
             schedule();
         } else {
+            card.tiltLive = false;
+            card.rawAx = 0;
+            card.rawAy = 0;
+            card.ax = 0;
+            card.ay = 0;
             card.wrap.classList.remove("is-tilting");
         }
         ownTouch(card);
-        if (flung) flingScroll(vy);
+        if (flung) flingScroll(-vy);
     }
 
     for (const wrap of wraps) {
