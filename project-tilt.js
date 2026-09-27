@@ -3,14 +3,16 @@
 // наклон начинается только со следующего движения.
 // На телефоне палец поворачивает картинку, пока ближний угол не подойдёт
 // к странице: 1,5° десктопа на маленькой карточке почти не видны.
-// До этого предела страница не листается. Дальше палец двигает страницу
-// как обычный свайп (вниз пальцем — к началу). Тот же жест Safari уже
-// не забирает, поэтому листание здесь, один к одному с пальцем.
+// До этого предела страница не листается. Дальше она едет за пальцем
+// сдвигом слоя, а не scrollBy: прокрутка окна прямо во время касания
+// на айфоне спорит со свайпом и дёргает страницу вверх-вниз.
+// Когда палец отпущен, сдвиг записывается в прокрутку и докатывается.
 
 const PAD = 220;
 const FINGER_SLOP = 8;
 const FINGER_REACH = 64;
 const FINGER_MAX = 16 * Math.PI / 180;
+const FLING_MAX = 2;
 const narrowLayout = window.matchMedia("(max-width: 950px)");
 const TILT = {
     lift: 24,
@@ -925,6 +927,40 @@ export function initProjectTilts() {
         flingFrame = 0;
     }
 
+    const page = document.querySelector(".page-wrapper");
+
+    function scrollRoom(dir) {
+        const max = Math.max(
+            0,
+            Math.max(document.documentElement.scrollHeight, document.body.scrollHeight) - window.innerHeight
+        );
+        const y = window.scrollY;
+        return dir > 0 ? y : Math.max(0, max - y);
+    }
+
+    // Положительный сдвиг опускает страницу за пальцем (к началу).
+    function setPageShift(shift) {
+        if (!page) return 0;
+        if (!shift) {
+            page.style.transform = "";
+            return 0;
+        }
+        const applied = Math.sign(shift) * Math.min(Math.abs(shift), scrollRoom(shift));
+        page.style.transform = applied ? `translate3d(0, ${applied}px, 0)` : "";
+        return applied;
+    }
+
+    function commitPageShift(shift) {
+        if (!page) return;
+        page.style.transform = "";
+        if (!shift) return;
+        const max = Math.max(
+            0,
+            Math.max(document.documentElement.scrollHeight, document.body.scrollHeight) - window.innerHeight
+        );
+        window.scrollTo(0, Math.min(max, Math.max(0, window.scrollY - shift)));
+    }
+
     function flingScroll(vy) {
         stopFling();
         let v = vy * 16;
@@ -1111,7 +1147,7 @@ export function initProjectTilts() {
             lastT: performance.now(),
             nx: 0,
             ny: 0,
-            scrolled: 0,
+            shift: 0,
             vy: 0,
         };
         try { card.box.setPointerCapture(event.pointerId); } catch (err) { /* синтетическое событие */ }
@@ -1130,18 +1166,11 @@ export function initProjectTilts() {
         if (Math.hypot(dx, dy) < FINGER_SLOP) return;
         event.preventDefault();
         card.suppressClick = true;
-        if (!card.revealed || !card.shown()) {
-            const delta = event.clientY - prevY;
-            if (delta) window.scrollBy(0, -delta);
-            return;
-        }
         card.tiltLive = true;
         finger.nx = Math.max(-1, Math.min(1, dx / FINGER_REACH));
         finger.ny = Math.max(-1, Math.min(1, -dy / FINGER_REACH));
         const surplus = dy - Math.max(-FINGER_REACH, Math.min(FINGER_REACH, dy));
-        const delta = surplus - finger.scrolled;
-        finger.scrolled = surplus;
-        if (delta) window.scrollBy(0, -delta);
+        finger.shift = setPageShift(surplus);
         card.needsPaint = true;
         schedule();
     }
@@ -1149,9 +1178,11 @@ export function initProjectTilts() {
     function endFinger(card, event) {
         const finger = card.finger;
         if (!finger || (event && event.pointerId !== finger.id)) return;
-        const flung = Math.abs(finger.scrolled) > 0 && Math.abs(finger.vy) > 0.3;
-        const vy = finger.vy;
+        const flung = Math.abs(finger.shift) > 0 && Math.abs(finger.vy) > 0.3;
+        const vy = Math.max(-FLING_MAX, Math.min(FLING_MAX, finger.vy));
+        const shift = finger.shift;
         card.finger = null;
+        commitPageShift(shift);
         if (event && card.box.hasPointerCapture && card.box.hasPointerCapture(event.pointerId)) {
             card.box.releasePointerCapture(event.pointerId);
         }
@@ -1222,6 +1253,15 @@ export function initProjectTilts() {
         box.addEventListener("pointerenter", (event) => onImagePointer(card, event));
         box.addEventListener("pointermove", (event) => onImagePointer(card, event));
         box.addEventListener("pointermove", (event) => onFingerMove(card, event), { passive: false });
+        box.addEventListener("touchmove", (event) => {
+            const finger = card.finger;
+            const touch = event.touches[0];
+            if (!finger || !touch) return;
+            const dx = touch.clientX - finger.x0;
+            const dy = touch.clientY - finger.y0;
+            if (Math.hypot(dx, dy) < FINGER_SLOP) return;
+            event.preventDefault();
+        }, { passive: false });
         box.addEventListener("pointerup", (event) => endFinger(card, event));
         box.addEventListener("pointercancel", (event) => endFinger(card, event));
         box.addEventListener("lostpointercapture", (event) => endFinger(card, event));
