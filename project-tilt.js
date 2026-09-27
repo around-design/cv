@@ -1,8 +1,13 @@
 // Наклон и тень картинок проектов — те же настройки, что на стенде.
-// Пока картинка проявляется, она прямая. Если курсор уже был на ней,
+// Пока картинка проявляется, она прямая. Если курсор или палец уже были на ней,
 // наклон начинается только со следующего движения.
+// На телефоне палец поворачивает картинку во все стороны, не дальше того же угла,
+// что курсор на десктопе. Короткий сдвиг доходит до предела; дальше по вертикали
+// страница листается.
 
 const PAD = 220;
+const FINGER_SLOP = 8;
+const FINGER_REACH = 64;
 const narrowLayout = window.matchMedia("(max-width: 950px)");
 const TILT = {
     lift: 24,
@@ -737,8 +742,8 @@ function createEngine(canvas) {
         if (!img.complete || !img.naturalWidth) return false;
 
         const lights = shadowLights();
-        const drawPhoto = canTilt();
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const drawPhoto = card.drawPhoto != null ? card.drawPhoto : canTilt();
+        const dpr = Math.min(window.devicePixelRatio || 1, 3);
         const shW = Math.max(2, Math.round(layout.shW));
         const shH = Math.max(2, Math.round(layout.shH));
         const bw = Math.max(2, Math.round(shW * dpr));
@@ -909,6 +914,43 @@ export function initProjectTilts() {
         raf = requestAnimationFrame(tick);
     }
 
+    let flingFrame = 0;
+
+    function stopFling() {
+        if (!flingFrame) return;
+        cancelAnimationFrame(flingFrame);
+        flingFrame = 0;
+    }
+
+    function flingScroll(vy) {
+        stopFling();
+        let v = vy * 16;
+        let prev = performance.now();
+        const coast = (now) => {
+            const dt = Math.min(34, now - prev);
+            prev = now;
+            window.scrollBy(0, v * dt / 16);
+            v *= Math.pow(0.94, dt / 16);
+            if (Math.abs(v) > 0.35) flingFrame = requestAnimationFrame(coast);
+            else flingFrame = 0;
+        };
+        flingFrame = requestAnimationFrame(coast);
+    }
+
+    function isFinger(event) {
+        return event.pointerType === "touch" || event.pointerType === "pen";
+    }
+
+    function ownTouch(card) {
+        card.box.style.touchAction = card.revealed && !canTilt() ? "none" : "";
+    }
+
+    function markPlane(card) {
+        const turning = card.tiltLive || Math.hypot(card.ax, card.ay) > 0.001;
+        card.wrap.classList.toggle("is-tilting", turning && !canTilt());
+        card.drawPhoto = canTilt() || card.wrap.classList.contains("is-tilting");
+    }
+
     function noteOpaque(card) {
         if (card.revealed || !card.shown()) return;
         if (card.opacity() < 0.999) return;
@@ -916,6 +958,7 @@ export function initProjectTilts() {
         card.anchor = card.pointer
             ? { x: card.pointer.localX, y: card.pointer.localY }
             : null;
+        ownTouch(card);
     }
 
     function step(card, dt) {
@@ -927,7 +970,11 @@ export function initProjectTilts() {
         let tay = 0;
         const hw = layout.cardW / 2;
         const hh = layout.cardH / 2;
-        if (card.tiltLive && card.pointer && canTilt()) {
+        if (card.tiltLive && card.finger) {
+            const maxTilt = TILT.cursorRange * Math.PI / 180;
+            tax = -card.finger.ny * maxTilt;
+            tay = card.finger.nx * maxTilt;
+        } else if (card.tiltLive && card.pointer && canTilt()) {
             const maxTilt = TILT.cursorRange * Math.PI / 180;
             const shown = fitScale(card.rawAx, card.rawAy, hw, hh, TILT.lift);
             const corners = cornersAt(card.rawAx * shown, card.rawAy * shown, layout);
@@ -970,6 +1017,7 @@ export function initProjectTilts() {
         }
         const slot = acquire(card);
         if (!slot) return false;
+        markPlane(card);
         slot.engine.draw(card);
         card.needsPaint = false;
         card.animating = animating;
@@ -990,6 +1038,7 @@ export function initProjectTilts() {
     }
 
     function resetInteraction(card) {
+        const finger = card.finger;
         card.tiltLive = false;
         card.revealed = false;
         card.anchor = null;
@@ -1000,6 +1049,9 @@ export function initProjectTilts() {
         card.ay = 0;
         card.needsPaint = false;
         card.animating = false;
+        card.drawPhoto = canTilt();
+        card.wrap.classList.remove("is-tilting");
+        if (!finger) card.box.style.touchAction = "";
     }
 
     function placePointer(card, event) {
@@ -1015,6 +1067,7 @@ export function initProjectTilts() {
     }
 
     function onImagePointer(card, event) {
+        if (isFinger(event)) return;
         const wasRevealed = card.revealed;
         placePointer(card, event);
         noteOpaque(card);
@@ -1033,6 +1086,73 @@ export function initProjectTilts() {
         if (!card.tiltLive) return;
         card.needsPaint = true;
         schedule();
+    }
+
+    function onFingerDown(card, event) {
+        if (!isFinger(event) || !card.revealed || !card.shown()) return;
+        stopFling();
+        card.suppressClick = false;
+        card.finger = {
+            id: event.pointerId,
+            x0: event.clientX,
+            y0: event.clientY,
+            lastY: event.clientY,
+            lastT: performance.now(),
+            nx: 0,
+            ny: 0,
+            scrolled: 0,
+            vy: 0,
+        };
+        try { card.box.setPointerCapture(event.pointerId); } catch (err) { /* синтетическое событие */ }
+    }
+
+    function onFingerMove(card, event) {
+        const finger = card.finger;
+        if (!finger || event.pointerId !== finger.id) return;
+        const dx = event.clientX - finger.x0;
+        const dy = event.clientY - finger.y0;
+        const now = performance.now();
+        const prevY = finger.lastY;
+        finger.vy = (event.clientY - prevY) / Math.max(1, now - finger.lastT);
+        finger.lastT = now;
+        finger.lastY = event.clientY;
+        if (Math.hypot(dx, dy) < FINGER_SLOP) return;
+        event.preventDefault();
+        card.suppressClick = true;
+        if (!card.revealed || !card.shown()) {
+            const delta = event.clientY - prevY;
+            if (delta) window.scrollBy(0, delta);
+            return;
+        }
+        card.tiltLive = true;
+        finger.nx = Math.max(-1, Math.min(1, dx / FINGER_REACH));
+        finger.ny = Math.max(-1, Math.min(1, -dy / FINGER_REACH));
+        const surplus = dy - Math.max(-FINGER_REACH, Math.min(FINGER_REACH, dy));
+        const delta = surplus - finger.scrolled;
+        finger.scrolled = surplus;
+        if (delta) window.scrollBy(0, delta);
+        card.needsPaint = true;
+        schedule();
+    }
+
+    function endFinger(card, event) {
+        const finger = card.finger;
+        if (!finger || (event && event.pointerId !== finger.id)) return;
+        const flung = Math.abs(finger.scrolled) > 0 && Math.abs(finger.vy) > 0.3;
+        const vy = finger.vy;
+        card.finger = null;
+        card.tiltLive = false;
+        if (event && card.box.hasPointerCapture && card.box.hasPointerCapture(event.pointerId)) {
+            card.box.releasePointerCapture(event.pointerId);
+        }
+        if (card.shown()) {
+            card.needsPaint = true;
+            schedule();
+        } else {
+            card.wrap.classList.remove("is-tilting");
+        }
+        ownTouch(card);
+        if (flung) flingScroll(vy);
     }
 
     for (const wrap of wraps) {
@@ -1074,6 +1194,7 @@ export function initProjectTilts() {
             if (card.animating) schedule();
         });
         project.addEventListener("pointerleave", () => {
+            if (card.finger) return;
             if (card.shown()) {
                 card.pointer = null;
                 card.needsPaint = true;
@@ -1082,9 +1203,15 @@ export function initProjectTilts() {
             }
             resetInteraction(card);
         });
+        box.addEventListener("pointerdown", (event) => onFingerDown(card, event));
         box.addEventListener("pointerenter", (event) => onImagePointer(card, event));
         box.addEventListener("pointermove", (event) => onImagePointer(card, event));
+        box.addEventListener("pointermove", (event) => onFingerMove(card, event), { passive: false });
+        box.addEventListener("pointerup", (event) => endFinger(card, event));
+        box.addEventListener("pointercancel", (event) => endFinger(card, event));
+        box.addEventListener("lostpointercapture", (event) => endFinger(card, event));
         box.addEventListener("pointerleave", () => {
+            if (card.finger) return;
             card.pointer = null;
             if (!card.shown()) return;
             if (card.tiltLive) {
@@ -1092,6 +1219,15 @@ export function initProjectTilts() {
                 schedule();
             }
         });
+        const link = box.closest("a");
+        if (link) {
+            link.addEventListener("click", (event) => {
+                if (!card.suppressClick) return;
+                event.preventDefault();
+                event.stopPropagation();
+                card.suppressClick = false;
+            });
+        }
         wrap.addEventListener("transitionend", (event) => {
             if (event.propertyName !== "opacity" || !card.shown()) return;
             noteOpaque(card);

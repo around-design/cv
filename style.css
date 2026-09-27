@@ -287,12 +287,19 @@ body.has-project-tilt .img-hover {
     opacity: 0;
 }
 
-/* Телефон: фото остаётся тегом img, холст под ним — только тень. */
+/* Телефон: в покое фото — сам img, холст под ним только тень.
+   Пока палец поворачивает карточку, кадр рисует холст. */
 @media (hover: none), (pointer: coarse) {
+    .project-image { touch-action: pan-y; }
+
     body.has-project-tilt .img-hover {
         position: relative;
         z-index: 2;
         opacity: 1;
+    }
+
+    body.has-project-tilt .img-hover-wrap.is-tilting .img-hover {
+        opacity: 0;
     }
 }
 
