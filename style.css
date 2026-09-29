@@ -316,38 +316,43 @@ body.has-project-tilt .img-hover {
     --shadow: 0, 0, 0;
     --shadow-near: var(--shadow);
     --shadow-near-a: 0.10;
+    --shadow-gain: 1;
 }
 .project-profi { --shadow: 50, 58, 100; }       /* холодный голубой #E4E8FC */
-.project-ruchess { --shadow: 95, 72, 38; }      /* кремово-жёлтый #FCECE0 */
+.project-ruchess { --shadow: 24, 25, 42; }       /* индиго #676ACF */
 .project-automate { --shadow: 45, 55, 72; }     /* холодный серо-голубой #E0E4E4 */
 .project-style { --shadow: 88, 62, 58; }        /* тёплый розоватый #F4F0F0 */
 .project-tad {
-    --shadow: 45, 60, 95;                       /* холодный голубой #F0F4F8 */
-    --shadow-near: 16, 22, 38;                  /* темнее, чтобы не сливаться с чёрным UI */
+    --shadow: 8, 10, 16;                        /* холодный голубой #F0F4F8 */
+    --shadow-near: 4, 6, 10;                    /* темнее, чтобы не сливаться с чёрным UI */
     --shadow-near-a: 0.24;
+    --shadow-gain: 1.3;                         /* цвет уже у пола, иначе край не отделяется от серого UI */
 }
-.project-homestead { --shadow: 92, 78, 55; }    /* тёплый янтарь #E8E4E0 */
+.project-homestead { --shadow: 24, 35, 42; }    /* небесный #7BC6F6 */
 .project-plates { --shadow: 95, 42, 42; }       /* серый #F0F0F0 + красный #90240C */
 
 /* Если WebGL недоступен — плоская CSS-тень теми же слоями, без наклона. */
 body:not(.has-project-tilt):not(.is-safari) .img-hover-wrap {
-    filter: drop-shadow(0 0 12px rgba(var(--shadow-near), 0.095))
-            drop-shadow(18px 36px 32px rgba(var(--shadow), 0.095))
-            drop-shadow(32px 64px 43px rgba(var(--shadow), 0.07));
+    filter: drop-shadow(0 0 12px rgba(var(--shadow-near), calc(0.095 * var(--shadow-gain))))
+            drop-shadow(18px 36px 32px rgba(var(--shadow), calc(0.095 * var(--shadow-gain))))
+            drop-shadow(32px 64px 43px rgba(var(--shadow), calc(0.07 * var(--shadow-gain))));
 }
 
 /* Десктопный ховер */
 @media (min-width: 951px) {
-    body:not(.is-safari) .project:hover .img-base {
+    body:not(.is-safari) .project:hover .img-base,
+    body:not(.is-safari) .project:has(.is-settling) .img-base {
         -webkit-mask-position: var(--mask-reveal) 0%;
         mask-position: var(--mask-reveal) 0%;
     }
 
-    body.is-safari .project:hover .img-base {
+    body.is-safari .project:hover .img-base,
+    body.is-safari .project:has(.is-settling) .img-base {
         opacity: 0;
     }
 
-    .project:hover .img-hover-wrap {
+    .project:hover .img-hover-wrap,
+    .img-hover-wrap.is-settling {
         opacity: 1;
     }
 }

@@ -25,6 +25,7 @@ const TILT = {
     gain: 1.5,
     minFrac: 0.01,
     fastTau: 90,
+    restTau: 180,
     lights: [
         { x: 0, y: 0, blur: 12, opacity: 0.095 },
         { x: 18, y: 36, blur: 32, opacity: 0.095 },
@@ -442,14 +443,22 @@ function useTiltSpace() {
 
 // На узкой вёрстке те же три света, но вдвое ближе и вдвое резче:
 // карточка меньше, и десктопный размах выглядит слишком большим.
-function shadowLights() {
-    if (!narrowLayout.matches) return TILT.lights;
-    return TILT.lights.map((light) => ({
-        x: light.x * 0.5,
-        y: light.y * 0.5,
-        blur: light.blur * 0.5,
-        opacity: light.opacity,
-    }));
+function readGain(project) {
+    const gain = Number.parseFloat(getComputedStyle(project).getPropertyValue("--shadow-gain"));
+    return Number.isFinite(gain) && gain > 0 ? gain : 1;
+}
+
+function shadowLights(gain = 1) {
+    const lights = narrowLayout.matches
+        ? TILT.lights.map((light) => ({
+            x: light.x * 0.5,
+            y: light.y * 0.5,
+            blur: light.blur * 0.5,
+            opacity: light.opacity,
+        }))
+        : TILT.lights;
+    if (gain === 1) return lights;
+    return lights.map((light) => ({ ...light, opacity: light.opacity * gain }));
 }
 
 function createEngine(canvas) {
@@ -754,7 +763,7 @@ function createEngine(canvas) {
         if (!layout || layout.cardW < 2 || layout.cardH < 2) return false;
         if (!img.complete || !img.naturalWidth) return false;
 
-        const lights = shadowLights();
+        const lights = shadowLights(card.gain);
         const drawPhoto = card.drawPhoto != null ? card.drawPhoto : canTilt();
         const dpr = Math.min(window.devicePixelRatio || 1, 3);
         const shW = Math.max(2, Math.round(layout.shW));
@@ -1041,7 +1050,8 @@ export function initProjectTilts() {
             card.rawAx = 0;
             card.rawAy = 0;
         } else {
-            const tau = card.finger ? 45 : TILT.fastTau;
+            const cursorReturn = canTilt() && !card.pointer;
+            const tau = card.finger ? 45 : (cursorReturn ? TILT.restTau : TILT.fastTau);
             const ease = 1 - Math.exp(-dt / tau);
             card.rawAx += (tax - card.rawAx) * ease;
             card.rawAy += (tay - card.rawAy) * ease;
@@ -1058,7 +1068,7 @@ export function initProjectTilts() {
     }
 
     function paint(card, dt) {
-        if (!card.shown()) return false;
+        if (!card.shown() && !card.settling) return false;
         useTiltSpace();
         noteOpaque(card);
         const animating = step(card, dt);
@@ -1076,7 +1086,8 @@ export function initProjectTilts() {
         slot.engine.draw(card);
         card.needsPaint = false;
         card.animating = animating;
-        return animating;
+        if (card.settling && !card.tiltLive) finishSettle(card);
+        return card.animating;
     }
 
     function tick(now) {
@@ -1085,15 +1096,44 @@ export function initProjectTilts() {
         last = now;
         let again = false;
         for (const card of cards) {
-            if (!card.shown()) continue;
+            if (!card.shown() && !card.settling) continue;
             if (!card.needsPaint && !card.animating) continue;
             if (paint(card, dt)) again = true;
         }
         if (again) schedule();
     }
 
+    function awayFromRest(card) {
+        return Math.hypot(card.rawAx, card.rawAy) > 1e-3;
+    }
+
+    // Десктоп: курсор ушёл, а карточка ещё наклонена. Держим её видимой,
+    // пока наклон доезжает до нуля тем же шагом, что и при уходе с картинки на текст.
+    function beginSettle(card) {
+        card.settling = true;
+        card.pointer = null;
+        card.wrap.classList.add("is-settling");
+        card.needsPaint = true;
+        card.animating = true;
+        schedule();
+    }
+
+    function finishSettle(card) {
+        card.settling = false;
+        card.wrap.classList.remove("is-settling");
+        card.revealed = false;
+        card.anchor = null;
+        card.pointer = null;
+        card.tiltLive = false;
+        card.needsPaint = false;
+        card.animating = false;
+        card.drawPhoto = canTilt();
+    }
+
     function resetInteraction(card) {
         if (card.finger) return;
+        card.settling = false;
+        card.wrap.classList.remove("is-settling");
         card.tiltLive = false;
         card.revealed = false;
         card.anchor = null;
@@ -1222,9 +1262,11 @@ export function initProjectTilts() {
             img,
             box,
             colors: readColors(project),
+            gain: readGain(project),
             pointer: null,
             anchor: null,
             revealed: false,
+            settling: false,
             tiltLive: false,
             rawAx: 0,
             rawAy: 0,
@@ -1244,6 +1286,10 @@ export function initProjectTilts() {
         cards.push(card);
 
         project.addEventListener("pointerenter", () => {
+            if (card.settling) {
+                card.settling = false;
+                card.wrap.classList.remove("is-settling");
+            }
             card.needsPaint = true;
             paint(card, 16);
             if (card.animating) schedule();
@@ -1254,6 +1300,10 @@ export function initProjectTilts() {
                 card.pointer = null;
                 card.needsPaint = true;
                 schedule();
+                return;
+            }
+            if (canTilt() && !narrowLayout.matches && card.tiltLive && awayFromRest(card)) {
+                beginSettle(card);
                 return;
             }
             resetInteraction(card);

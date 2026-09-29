@@ -8,8 +8,8 @@
     <meta name="author" content="Валентин Филиппов">
     <link rel="canonical" href="https://cv.around.design/">
     <link href="images/favicon.png" rel="icon">
-    <link rel="stylesheet" href="style.css?v=77">
-    <link rel="modulepreload" href="project-tilt.js?v=10">
+    <link rel="stylesheet" href="style.css?v=88">
+    <link rel="modulepreload" href="project-tilt.js?v=13">
     <link rel="modulepreload" href="hero-3d/hero-site.js?v=19">
     <link rel="modulepreload" href="hero-3d/hero-scene.js?v=12">
     <link rel="modulepreload" href="hero-3d/hero-shape.js?v=8">
@@ -131,8 +131,8 @@
             <div class="project project-ruchess">
                 <a href="https://around.design/projects/ruchess/" class="project-image-link" data-i18n-href="ruchess_link">
                     <div class="project-image">
-                        <img src="images/ruchess-sketch.png" alt="Ruchess, шахматная образовательная платформа" data-i18n-alt="ruchess_title" class="img-base">
-                        <div class="img-hover-wrap"><img src="images/ruchess-real.png" alt="Ruchess, шахматная образовательная платформа" data-i18n-alt="ruchess_title" class="img-hover"></div>
+                        <img src="images/ruchess-sketch.png?v=1" alt="Ruchess, шахматная образовательная платформа" data-i18n-alt="ruchess_title" class="img-base">
+                        <div class="img-hover-wrap"><img src="images/ruchess-real.png?v=1" alt="Ruchess, шахматная образовательная платформа" data-i18n-alt="ruchess_title" class="img-hover"></div>
                     </div>
                 </a>
                 <div class="project-text">
@@ -275,7 +275,7 @@
             const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
             if (isSafari) document.body.classList.add('is-safari');
 
-            import("./project-tilt.js?v=10").then((mod) => mod.initProjectTilts());
+            import("./project-tilt.js?v=13").then((mod) => mod.initProjectTilts());
 
             // Плавное переключение через Observer
             if (window.innerWidth <= 950) {
