@@ -9,7 +9,7 @@
     <link rel="canonical" href="https://cv.around.design/">
     <link href="images/favicon.png" rel="icon">
     <link rel="stylesheet" href="style.css?v=88">
-    <link rel="modulepreload" href="project-tilt.js?v=13">
+    <link rel="modulepreload" href="project-tilt.js?v=15">
     <link rel="modulepreload" href="hero-3d/hero-site.js?v=19">
     <link rel="modulepreload" href="hero-3d/hero-scene.js?v=12">
     <link rel="modulepreload" href="hero-3d/hero-shape.js?v=8">
@@ -202,9 +202,10 @@
                 <svg class="side-quests-line" viewBox="0 0 936 56" preserveAspectRatio="none" aria-hidden="true" focusable="false">
                     <path d="M0.41354 39.6587C288.997 90.2014 561.64 -34.7673 934.78 18.7676" stroke="#24221F" stroke-width="3" fill="none"/>
                 </svg>
-                <h2 class="side-quests-title" data-i18n="side_quests_title">Сайд-квесты</h2>
+                <h2 class="side-quests-title" data-i18n="side_quests_title">Сайд-квест</h2>
             </div>
 
+            <!-- HIDDEN: Homestead. Чтобы вернуть — убрать этот комментарий и закрывающий ниже.
             <div class="project project-homestead">
                 <a href="https://around.design/landings/homestead/" target="_blank" rel="noopener noreferrer" class="project-image-link" data-i18n-href="homestead_link">
                     <div class="project-image">
@@ -223,6 +224,7 @@
                     </div>
                 </div>
             </div>
+            -->
 
             <div class="project project-plates">
                 <a href="https://around.design/projects/russian-license-plates/" class="project-image-link" data-i18n-href="plates_link">
@@ -275,7 +277,7 @@
             const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
             if (isSafari) document.body.classList.add('is-safari');
 
-            import("./project-tilt.js?v=13").then((mod) => mod.initProjectTilts());
+            import("./project-tilt.js?v=15").then((mod) => mod.initProjectTilts());
 
             // Плавное переключение через Observer
             if (window.innerWidth <= 950) {
@@ -345,7 +347,7 @@
                         <p>I designed and tested a new version of the system’s web interface that makes it easier for specialists to detect and analyze attacks.</p>
                     `,
 
-                    side_quests_title: "Side quests",
+                    side_quests_title: "Side quest",
 
                     homestead_title: "Homestead, a digital pensieve",
                     homestead_link: "https://around.design/landings/homestead/",

@@ -135,6 +135,7 @@ const FS_BOX = `#version 300 es
     uniform float uLift;
     uniform float uGain;
     uniform float uMinFrac;
+    uniform float uSpread;
     out vec4 fragColor;
 
     float zAt(mat3 H, vec2 frag) {
@@ -190,7 +191,22 @@ const FS_BOX = `#version 300 es
         vec2 b = p + vec2(r);
         vec3 sum = prefix(b) - prefix(vec2(a.x, b.y)) - prefix(vec2(b.x, a.y)) + prefix(a);
         float area = max((b.x - a.x) * (b.y - a.y), 1e-3);
-        return clamp(sum[channel] / area, 0.0, 1.0);
+        float value = sum[channel] / area;
+        // NaN из разности больших префиксов — пусто, не шум.
+        if (!(value > 0.0)) return 0.0;
+        return min(value, 1.0);
+    }
+
+    // Пиксели за горизонтом проекции — не тень. grad — сколько UV на один пиксель.
+    void uvAt(mat3 H, vec2 frag, out vec2 uv, out vec2 grad, out float horizon) {
+        vec3 q = H * vec3(frag, 1.0);
+        horizon = q.z;
+        float w = max(abs(q.z), 1e-4);
+        float s = q.z < 0.0 ? -1.0 : 1.0;
+        uv = q.xy / w * s;
+        vec2 duvdx = (H[0].xy * q.z - q.xy * H[0].z) / (q.z * q.z);
+        vec2 duvdy = (H[1].xy * q.z - q.xy * H[1].z) / (q.z * q.z);
+        grad = max(vec2(length(vec2(duvdx.x, duvdy.x)), length(vec2(duvdx.y, duvdy.y))), vec2(1e-4));
     }
 
     void main() {
@@ -201,7 +217,16 @@ const FS_BOX = `#version 300 es
         vec3 outMask = vec3(0.0);
         for (int i = 0; i < 3; i++) {
             float sigmaFull = max(B[i].x * heightScale(H[i], fullFrag) * uGain, 0.0);
-            outMask[i] = boxed(i, p, sigmaFull * 0.5);
+            // Три прохода бокса, каждый добавляет свой радиус. Считать нужно
+            // всю эту зону, иначе слои остаются резкими. Дальше префиксная
+            // сумма пустая и на 16-битном буфере (Сафари) рисует серый шум.
+            vec2 uv, grad;
+            float horizon;
+            uvAt(H[i], fullFrag, uv, grad, horizon);
+            vec2 away = max(-uv, uv - vec2(1.0));
+            float outsidePx = length(max(away, 0.0) / grad);
+            float reach = sigmaFull * uSpread + 6.0;
+            if (horizon > 1e-3 && outsidePx <= reach) outMask[i] = boxed(i, p, sigmaFull * 0.5);
         }
         fragColor = vec4(outMask, 1.0);
     }`;
@@ -547,6 +572,7 @@ function createEngine(canvas) {
     locs.boxLift = loc(boxProg, "uLift");
     locs.boxGain = loc(boxProg, "uGain");
     locs.boxMinFrac = loc(boxProg, "uMinFrac");
+    locs.boxSpread = loc(boxProg, "uSpread");
     for (const name of ["uTex0", "uH0", "uH1", "uH2", "uZ", "uL0", "uL1", "uL2", "uCanvas", "uShadow", "uLift", "uGain", "uContact", "uMinFrac", "uC0", "uC1", "uC2"]) {
         locs[name] = loc(compProg, name);
     }
@@ -752,6 +778,7 @@ function createEngine(canvas) {
             gl.uniform1f(locs.boxLift, TILT.lift);
             gl.uniform1f(locs.boxGain, TILT.gain);
             gl.uniform1f(locs.boxMinFrac, minFrac);
+            gl.uniform1f(locs.boxSpread, pass + 1);
             gl.drawArrays(gl.TRIANGLES, 0, 3);
             image = dest;
         }
