@@ -8,6 +8,8 @@
 // сдвигом слоя, а не scrollBy: прокрутка окна прямо во время касания
 // на айфоне спорит со свайпом и дёргает страницу вверх-вниз.
 // Когда палец отпущен, сдвиг записывается в прокрутку и докатывается.
+// Нажатие кнопки мыши на картинке или названии опускает карточку к странице:
+// поворот остаётся, тень становится ближе и резче. Отпускание открывает ссылку.
 
 const PAD = 220;
 const FINGER_SLOP = 8;
@@ -17,6 +19,9 @@ const FINGER_LIFT = 40;
 const FINGER_PERSPECTIVE = 720;
 const FLING_MAX = 2;
 const narrowLayout = window.matchMedia("(max-width: 950px)");
+const LANDED_RATIO = 0.25;
+const APPROACH_TAU = 42;
+const PRESS_DROP = 12;
 const TILT = {
     lift: 24,
     perspective: 1410,
@@ -473,6 +478,13 @@ function readGain(project) {
     return Number.isFinite(gain) && gain > 0 ? gain : 1;
 }
 
+// Клик опускает карточку к странице. Кадр остаётся на месте, а тень
+// считается от меньшей высоты: смещение и размытие и так пропорциональны z / подъём.
+function shadowScale(approach) {
+    const t = Math.max(0, Math.min(1, approach || 0));
+    return 1 + (LANDED_RATIO - 1) * t;
+}
+
 function shadowLights(gain = 1) {
     const lights = narrowLayout.matches
         ? TILT.lights.map((light) => ({
@@ -808,8 +820,16 @@ function createEngine(canvas) {
         if (shW !== shadowW || shH !== shadowH) allocShadows(shW, shH);
 
         const cardCorners = cornersAt(card.ax, card.ay, layout);
+        const pressDrop = PRESS_DROP * (card.approach || 0);
+        const placed = cardCorners.map((corner) => (
+            pressDrop ? { ...corner, sy: corner.sy - pressDrop } : corner
+        ));
+        const zScale = shadowScale(card.approach);
         const zPack = new Float32Array([
-            cardCorners[0].z, cardCorners[1].z, cardCorners[2].z, cardCorners[3].z,
+            cardCorners[0].z * zScale,
+            cardCorners[1].z * zScale,
+            cardCorners[2].z * zScale,
+            cardCorners[3].z * zScale,
         ]);
         const minFrac = Math.max(TILT.minFrac, 0.001);
         const uvWant = [[0, 0], [1, 0], [1, 1], [0, 1]];
@@ -831,8 +851,8 @@ function createEngine(canvas) {
         gl.clear(gl.COLOR_BUFFER_BIT);
 
         lights.forEach((light, index) => {
-            const shifted = cardCorners.map((corner) => {
-                const shift = Math.max(corner.z / TILT.lift, minFrac);
+            const shifted = placed.map((corner) => {
+                const shift = Math.max(corner.z * zScale / TILT.lift, minFrac);
                 return {
                     sx: corner.sx + light.x * shift,
                     sy: corner.sy - light.y * shift,
@@ -891,7 +911,7 @@ function createEngine(canvas) {
 
         const toBufX = bw / shW;
         const toBufY = bh / shH;
-        const bufCorners = cardCorners.map((corner) => ({
+        const bufCorners = placed.map((corner) => ({
             sx: corner.sx * toBufX,
             sy: corner.sy * toBufY,
             w: corner.w,
@@ -1091,7 +1111,11 @@ export function initProjectTilts() {
         const fitted = fitScale(card.rawAx, card.rawAy, hw, hh, TILT.lift);
         card.ax = card.rawAx * fitted;
         card.ay = card.rawAy * fitted;
-        return Math.hypot(tax - card.rawAx, tay - card.rawAy) > 1e-4;
+        const approachEase = 1 - Math.exp(-dt / APPROACH_TAU);
+        card.approach += (card.approachTo - card.approach) * approachEase;
+        if (Math.abs(card.approachTo - card.approach) < 1e-3) card.approach = card.approachTo;
+        const tiltMoving = Math.hypot(tax - card.rawAx, tay - card.rawAy) > 1e-4;
+        return tiltMoving || card.approach !== card.approachTo;
     }
 
     function paint(card, dt) {
@@ -1110,10 +1134,11 @@ export function initProjectTilts() {
         const slot = acquire(card);
         if (!slot) return false;
         markPlane(card);
+        placePress(card);
         slot.engine.draw(card);
         card.needsPaint = false;
         card.animating = animating;
-        if (card.settling && !card.tiltLive) finishSettle(card);
+        if (card.settling && !card.tiltLive && card.approach === card.approachTo) finishSettle(card);
         return card.animating;
     }
 
@@ -1130,6 +1155,29 @@ export function initProjectTilts() {
         if (again) schedule();
     }
 
+    function beginApproach(card) {
+        if (card.approachTo === 1) return;
+        card.approachTo = 1;
+        card.wrap.classList.add("is-near");
+        card.needsPaint = true;
+        card.animating = true;
+        paint(card, 28);
+        if (card.animating) schedule();
+    }
+
+    function onApproachDown(card, event) {
+        if (event.button !== 0) return;
+        beginApproach(card);
+    }
+
+    // На телефоне кадр — сам img, холст рисует только тень. Сдвиг вниз
+    // у тени уже в буфере; фото двигаем здесь, пока его не взял холст.
+    function placePress(card) {
+        const drop = !card.drawPhoto && card.approach > 0 ? PRESS_DROP * card.approach : 0;
+        const next = drop ? `translate3d(0, ${drop}px, 0)` : "";
+        if (card.img.style.transform !== next) card.img.style.transform = next;
+    }
+
     function awayFromRest(card) {
         return Math.hypot(card.rawAx, card.rawAy) > 1e-3;
     }
@@ -1139,6 +1187,8 @@ export function initProjectTilts() {
     function beginSettle(card) {
         card.settling = true;
         card.pointer = null;
+        card.approachTo = 0;
+        card.wrap.classList.remove("is-near");
         card.wrap.classList.add("is-settling");
         card.needsPaint = true;
         card.animating = true;
@@ -1148,13 +1198,17 @@ export function initProjectTilts() {
     function finishSettle(card) {
         card.settling = false;
         card.wrap.classList.remove("is-settling");
+        card.wrap.classList.remove("is-near");
         card.revealed = false;
         card.anchor = null;
         card.pointer = null;
         card.tiltLive = false;
+        card.approach = 0;
+        card.approachTo = 0;
         card.needsPaint = false;
         card.animating = false;
         card.drawPhoto = canTilt();
+        card.img.style.transform = "";
     }
 
     function resetInteraction(card) {
@@ -1169,10 +1223,14 @@ export function initProjectTilts() {
         card.rawAy = 0;
         card.ax = 0;
         card.ay = 0;
+        card.approach = 0;
+        card.approachTo = 0;
         card.needsPaint = false;
         card.animating = false;
         card.drawPhoto = canTilt();
         card.wrap.classList.remove("is-tilting");
+        card.wrap.classList.remove("is-near");
+        card.img.style.transform = "";
         card.box.style.touchAction = "";
         card.img.style.touchAction = "";
     }
@@ -1259,6 +1317,10 @@ export function initProjectTilts() {
         const shift = finger.shift;
         card.finger = null;
         commitPageShift(shift);
+        if (card.suppressClick) {
+            card.approachTo = 0;
+            card.wrap.classList.remove("is-near");
+        }
         if (event && card.box.hasPointerCapture && card.box.hasPointerCapture(event.pointerId)) {
             card.box.releasePointerCapture(event.pointerId);
         }
@@ -1299,6 +1361,8 @@ export function initProjectTilts() {
             rawAy: 0,
             ax: 0,
             ay: 0,
+            approach: 0,
+            approachTo: 0,
             needsPaint: false,
             animating: false,
             slot: null,
@@ -1362,12 +1426,17 @@ export function initProjectTilts() {
         });
         const link = box.closest("a");
         if (link) {
+            link.addEventListener("pointerdown", (event) => onApproachDown(card, event));
             link.addEventListener("click", (event) => {
                 if (!card.suppressClick) return;
                 event.preventDefault();
                 event.stopPropagation();
                 card.suppressClick = false;
             });
+        }
+        const title = project.querySelector("h2 a");
+        if (title) {
+            title.addEventListener("pointerdown", (event) => onApproachDown(card, event));
         }
         wrap.addEventListener("transitionend", (event) => {
             if (event.propertyName !== "opacity" || !card.shown()) return;

@@ -336,6 +336,13 @@ body:not(.has-project-tilt):not(.is-safari) .img-hover-wrap {
     filter: drop-shadow(0 0 12px rgba(var(--shadow-near), calc(0.095 * var(--shadow-gain))))
             drop-shadow(18px 36px 32px rgba(var(--shadow), calc(0.095 * var(--shadow-gain))))
             drop-shadow(32px 64px 43px rgba(var(--shadow), calc(0.07 * var(--shadow-gain))));
+    transition: opacity var(--fade-dur) ease-in-out, filter 0.55s ease;
+}
+
+body:not(.has-project-tilt):not(.is-safari) .img-hover-wrap.is-near {
+    filter: drop-shadow(0 0 3px rgba(var(--shadow-near), calc(0.14 * var(--shadow-gain))))
+            drop-shadow(5px 9px 8px rgba(var(--shadow), calc(0.14 * var(--shadow-gain))))
+            drop-shadow(8px 16px 11px rgba(var(--shadow), calc(0.10 * var(--shadow-gain))));
 }
 
 /* Десктопный ховер */
