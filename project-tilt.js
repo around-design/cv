@@ -485,6 +485,11 @@ function shadowScale(approach) {
     return 1 + (LANDED_RATIO - 1) * t;
 }
 
+function pressDropPx(approach) {
+    const scale = narrowLayout.matches ? 0.5 : 1;
+    return PRESS_DROP * scale * (approach || 0);
+}
+
 function shadowLights(gain = 1) {
     const lights = narrowLayout.matches
         ? TILT.lights.map((light) => ({
@@ -820,7 +825,7 @@ function createEngine(canvas) {
         if (shW !== shadowW || shH !== shadowH) allocShadows(shW, shH);
 
         const cardCorners = cornersAt(card.ax, card.ay, layout);
-        const pressDrop = PRESS_DROP * (card.approach || 0);
+        const pressDrop = pressDropPx(card.approach);
         const placed = cardCorners.map((corner) => (
             pressDrop ? { ...corner, sy: corner.sy - pressDrop } : corner
         ));
@@ -1173,7 +1178,7 @@ export function initProjectTilts() {
     // На телефоне кадр — сам img, холст рисует только тень. Сдвиг вниз
     // у тени уже в буфере; фото двигаем здесь, пока его не взял холст.
     function placePress(card) {
-        const drop = !card.drawPhoto && card.approach > 0 ? PRESS_DROP * card.approach : 0;
+        const drop = !card.drawPhoto && card.approach > 0 ? pressDropPx(card.approach) : 0;
         const next = drop ? `translate3d(0, ${drop}px, 0)` : "";
         if (card.img.style.transform !== next) card.img.style.transform = next;
     }

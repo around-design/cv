@@ -9,7 +9,7 @@
     <link rel="canonical" href="https://cv.around.design/">
     <link href="images/favicon.png" rel="icon">
     <link rel="stylesheet" href="style.css?v=89">
-    <link rel="modulepreload" href="project-tilt.js?v=20">
+    <link rel="modulepreload" href="project-tilt.js?v=21">
     <link rel="modulepreload" href="hero-3d/hero-site.js?v=19">
     <link rel="modulepreload" href="hero-3d/hero-scene.js?v=12">
     <link rel="modulepreload" href="hero-3d/hero-shape.js?v=8">
@@ -277,7 +277,7 @@
             const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
             if (isSafari) document.body.classList.add('is-safari');
 
-            import("./project-tilt.js?v=20").then((mod) => mod.initProjectTilts());
+            import("./project-tilt.js?v=21").then((mod) => mod.initProjectTilts());
 
             // Плавное переключение через Observer
             if (window.innerWidth <= 950) {
